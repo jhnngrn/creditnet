@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>creditnet</title>
+<style>
+:root {
+  --bg: #fdfdfc; --fg: #1a1a1a; --fg2: #666; --border: #ddd;
+  --accent: #2255aa; --pos: #1a7a3a; --neg: #b33;
+  --row-hover: #f6f6f4; --input-bg: #fff;
+  --card-bg: #f8f8f7; --tag-bg: #eef2f7; --tag-fg: #335;
+  --modal-bg: rgba(0,0,0,.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131316; --fg: #e0e0de; --fg2: #999; --border: #2a2a2e;
+    --accent: #6a9fff; --pos: #4cb86a; --neg: #e66;
+    --row-hover: #1e1e22; --input-bg: #1e1e22;
+    --card-bg: #1a1a1e; --tag-bg: #262a30; --tag-fg: #aab;
+    --modal-bg: rgba(0,0,0,.6);
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.5; font-size: 15px; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px; }
+header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+header h1 { font-size: 18px; font-weight: 600; }
+header .right { font-size: 13px; color: var(--fg2); }
+header button { font-size: 13px; color: var(--fg2); background: none; border: none; cursor: pointer; margin-left: 12px; }
+header button:hover { color: var(--fg); }
+
+/* Inputs & buttons */
+input, select { padding: 6px 8px; font-size: 14px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--fg); font-family: inherit; }
+input[type=number] { -moz-appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.btn { padding: 6px 14px; font-size: 13px; border-radius: 4px; border: 1px solid var(--border); background: var(--input-bg); color: var(--fg); cursor: pointer; font-family: inherit; white-space: nowrap; }
+.btn:hover { border-color: var(--fg2); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { opacity: .9; }
+.btn-danger { background: var(--neg); color: #fff; border-color: var(--neg); }
+.btn-danger:hover { opacity: .9; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* Sections */
+.section { margin-bottom: 28px; }
+.section-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.section-header h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--fg2); }
+
+/* Card */
+.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; }
+
+/* Send payment */
+.send-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.send-row input { flex: 1; min-width: 120px; }
+.send-row select { min-width: 100px; }
+
+/* Link card */
+.link-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.link-peer { font-weight: 600; font-size: 15px; }
+.link-balance { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+.link-balance.pos { color: var(--pos); }
+.link-balance.neg { color: var(--neg); }
+.link-limits { font-size: 13px; color: var(--fg2); margin-bottom: 8px; display: flex; gap: 16px; }
+.link-limits strong { color: var(--fg); }
+.link-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.link-controls input { width: 80px; }
+.link-expand { font-size: 12px; color: var(--fg2); cursor: pointer; background: none; border: none; margin-left: auto; font-family: inherit; }
+.link-expand:hover { color: var(--fg); }
+.link-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--fg2); }
+.link-detail .detail-row { display: flex; justify-content: space-between; padding: 3px 0; }
+.link-modules { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--tag-bg); color: var(--tag-fg); }
+.tag-pending { background: transparent; border: 1px dashed var(--fg2); color: var(--fg2); font-style: italic; }
+
+/* Pending */
+.pending-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+.stat-card .label { font-size: 12px; color: var(--fg2); }
+.stat-card .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Receipts */
+.receipt-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.receipt-item .peer { color: var(--fg); }
+.receipt-item .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+.receipt-item .amount.pos { color: var(--pos); }
+.receipt-item .amount.neg { color: var(--neg); }
+
+/* Login */
+#login-view { max-width: 300px; margin: 80px auto; }
+#login-view h2 { font-size: 20px; font-weight: 500; margin-bottom: 20px; }
+#login-view label { display: block; font-size: 13px; color: var(--fg2); margin-bottom: 4px; margin-top: 12px; }
+#login-view input { width: 100%; }
+.error { color: var(--neg); font-size: 13px; margin-top: 8px; }
+
+/* Admin */
+.user-list { width: 100%; border-collapse: collapse; }
+.user-list th { text-align: left; font-size: 12px; font-weight: 500; color: var(--fg2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.user-list td { padding: 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.user-list tr:hover td { background: var(--row-hover); }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: var(--modal-bg); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 90%; max-width: 400px; }
+.modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.modal label { display: block; font-size: 13px; color: var(--fg2); margin-bottom: 4px; margin-top: 12px; }
+.modal input, .modal select { width: 100%; }
+.modal .actions { margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 20px; border-radius: 6px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; }
+.toast.show { opacity: 1; }
+.empty { text-align: center; color: var(--fg2); padding: 32px 0; font-size: 14px; }
+
+@media (max-width: 500px) {
+  .send-row { flex-direction: column; }
+  .send-row input, .send-row select { width: 100%; }
+  .stats { grid-template-columns: 1fr; }
+  .link-controls { flex-direction: column; align-items: stretch; }
+  .link-controls input { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<a href="code.html" style="position:fixed;top:12px;right:20px;font-size:13px;color:var(--fg2);text-decoration:none;z-index:10">Source code</a>
+<div id="login-view" style="display:none">
+  <h2>creditnet</h2>
+  <label>Username</label>
+  <input id="l-user" autocomplete="username" autofocus>
+  <label>Password</label>
+  <input id="l-pass" type="password" autocomplete="current-password">
+  <div id="l-error" class="error"></div>
+  <div style="margin-top:16px;display:flex;gap:8px">
+    <button class="btn btn-primary" onclick="doLogin()">Log in</button>
+    <button class="btn" onclick="doRegister()">Register</button>
+  </div>
+</div>
+
+<div id="main-view" class="wrap" style="display:none">
+  <header>
+    <h1>creditnet <span style="font-weight:400;font-size:14px;color:var(--fg2)" id="h-user"></span></h1>
+    <div class="right">
+      <button id="btn-settings" onclick="showModal('settings')">Settings</button>
+      <button onclick="doLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Admin view -->
+  <div id="admin-view" style="display:none">
+    <div class="section-header"><h2>Users</h2><button class="btn btn-sm" onclick="showModal('create-user')">Create user</button></div>
+    <div id="admin-users"></div>
+  </div>
+
+  <!-- User dashboard -->
+  <div id="dashboard-view">
+    <!-- Incoming payments -->
+    <div id="pay-requests-section" class="section" style="display:none">
+      <div class="section-header"><h2>Payment requests</h2></div>
+      <div id="pay-requests-list"></div>
+    </div>
+
+    <!-- Pending link requests -->
+    <div id="pending-section" class="section" style="display:none">
+      <div class="section-header"><h2>Pending requests</h2></div>
+      <div id="pending-list"></div>
+    </div>
+
+    <!-- Send payment -->
+    <div class="section">
+      <div class="section-header"><h2>Send payment</h2></div>
+      <div class="card">
+        <div class="send-row">
+          <input id="sp-to" placeholder="recipient (user@server)" onkeydown="if(event.key==='Enter')doSendPayment()">
+          <input id="sp-amount" type="text" inputmode="decimal" placeholder="0.00" style="width:90px" oninput="limitDec(this)" onkeydown="if(event.key==='Enter')doSendPayment()">
+          <select id="sp-proto"><option value="ripple">Ripple</option><option value="hierarchy">Hierarchy</option><option value="resilience">Resilience</option></select>
+          <button class="btn btn-primary" onclick="doSendPayment()">Send</button>
+        </div>
+        <div id="sp-error" class="error"></div>
+      </div>
+    </div>
+
+    <!-- Links -->
+    <div class="section">
+      <div class="section-header"><h2>Links</h2><button class="btn btn-sm" onclick="showModal('add-link')">+ Add link</button></div>
+      <div id="links-container"></div>
+    </div>
+
+    <!-- Stats -->
+    <div id="stats-section" class="section"></div>
+
+    <!-- Receipts -->
+    <div id="receipts-section" class="section" style="display:none">
+      <div class="section-header"><h2>Recent receipts</h2></div>
+      <div id="receipts-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-container" style="display:none"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = location.origin;
+const UNIT = 100000;
+function toDisplay(v) { return (v / UNIT).toFixed(2); }
+function toBase(v) { return Math.round(parseFloat(v) * UNIT); }
+let token = localStorage.getItem('cn-token');
+let username = localStorage.getItem('cn-user');
+let isAdmin = localStorage.getItem('cn-admin') === 'true';
+let status = null;
+let expanded = {};
+
+async function adminApi(method, payload) { return api('/api/admin', method, payload); }
+async function api(endpoint, method, payload) {
+  const headers = {'Content-Type': 'application/json'};
+  if (token && !(method === 'login' || method === 'register')) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API + endpoint, {
+    method: 'POST', headers,
+    body: JSON.stringify({method, payload: payload || {}})
+  });
+  if (!res.ok) throw new Error(res.statusText);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'unknown error');
+  return data.result;
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// --- Auth ---
+function showLogin() { document.getElementById('login-view').style.display = ''; document.getElementById('main-view').style.display = 'none'; document.getElementById('l-user').focus(); }
+function showMain() {
+  document.getElementById('login-view').style.display = 'none';
+  document.getElementById('main-view').style.display = '';
+  document.getElementById('h-user').textContent = username;
+  if (isAdmin) { document.getElementById('admin-view').style.display = 'block'; document.getElementById('dashboard-view').style.display = 'none'; refreshAdmin(); }
+  else { document.getElementById('admin-view').style.display = 'none'; document.getElementById('dashboard-view').style.display = 'block'; refresh(); }
+}
+
+async function doLogin() {
+  const u = document.getElementById('l-user').value.trim(), p = document.getElementById('l-pass').value;
+  if (!u) return;
+  try {
+    const r = await api('/api/auth', 'login', {username: u, password: p});
+    token = r.token; username = u; isAdmin = !!r.admin;
+    localStorage.setItem('cn-token', token); localStorage.setItem('cn-user', username); localStorage.setItem('cn-admin', isAdmin);
+    document.getElementById('l-error').textContent = ''; showMain();
+  } catch (e) { document.getElementById('l-error').textContent = e.message; }
+}
+async function doRegister() {
+  const u = document.getElementById('l-user').value.trim(), p = document.getElementById('l-pass').value;
+  if (!u) return;
+  try { await api('/api/auth', 'register', {username: u, password: p}); toast('Registered'); await doLogin(); } catch (e) { document.getElementById('l-error').textContent = e.message; }
+}
+function doLogout() {
+  api('/api/auth', 'logout').catch(()=>{});
+  token = null; username = null; isAdmin = false;
+  localStorage.removeItem('cn-token'); localStorage.removeItem('cn-user'); localStorage.removeItem('cn-admin');
+  showLogin();
+}
+document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+document.getElementById('l-user').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('l-pass').focus(); });
+
+// --- Admin ---
+async function refreshAdmin() {
+  try { const users = await adminApi('list_users'); renderUsers(users); }
+  catch (e) { if (e.message.includes('nauthorized')) { doLogout(); return; } toast('Error: '+e.message); }
+}
+function renderUsers(users) {
+  const c = document.getElementById('admin-users');
+  if (!users||!users.length) { c.innerHTML = '<div class="empty">No users.</div>'; return; }
+  users.sort((a,b) => a.name.localeCompare(b.name));
+  let h = '<table class="user-list"><thead><tr><th>User</th><th>Role</th><th></th></tr></thead><tbody>';
+  for (const u of users) {
+    h += '<tr><td>'+esc(u.name)+'</td><td>'+(u.admin?'<span class="tag">admin</span>':'user')+'</td><td style="text-align:right">'
+      + '<button class="btn btn-sm" onclick="showModal(\'reset-pw\',\''+esc(u.name)+'\')">Reset pw</button> '
+      + (u.admin?'':'<button class="btn btn-sm btn-danger" onclick="deleteUser(\''+esc(u.name)+'\')">Delete</button>')
+      + '</td></tr>';
+  }
+  c.innerHTML = h + '</tbody></table>';
+}
+async function deleteUser(name) { if (!confirm('Delete '+name+'?')) return; try { await adminApi('delete_user',{username:name}); toast('Deleted'); refreshAdmin(); } catch(e) { toast(e.message); } }
+
+// --- Dashboard ---
+async function refresh() {
+  try {
+    status = await api('/api/account', 'status');
+    renderLinks(); renderStats(); renderReceipts(); await refreshPending(); await refreshPayRequests();
+  } catch (e) { if (e.message.includes('nauthorized')) { doLogout(); return; } toast('Error: '+e.message); }
+}
+
+function renderLinks() {
+  const c = document.getElementById('links-container');
+  const links = status.links || {};
+  const peers = Object.keys(links).sort();
+  if (!peers.length) { c.innerHTML = '<div class="empty">No links yet.</div>'; return; }
+  let html = '';
+  for (const peer of peers) {
+    const l = links[peer], rawBal = l.balance||0;
+    const bal = toDisplay(rawBal);
+    const cls = rawBal > 0 ? 'pos' : rawBal < 0 ? 'neg' : '';
+    const ep = esc(peer);
+    const isExp = expanded[peer];
+    const ccParent = status.hierarchy?.parent;
+    const isParent = ccParent === peer;
+    html += '<div class="card">'
+      + '<div class="link-top"><span class="link-peer">'+ep+(isParent?' <span class="tag">parent</span>':'')+'</span><span class="link-balance '+cls+'">'+bal+'</span></div>'
+      + '<div class="link-limits"><span>credit out <strong>'+toDisplay(l.credit_limit||0)+'</strong></span><span>credit in <strong>'+toDisplay(l.credit_limit_in||0)+'</strong></span></div>'
+      + '<div class="link-controls">'
+      + '<input id="lim-'+ep+'" type="text" inputmode="decimal" placeholder="limit" value="'+toDisplay(l.credit_limit||0)+'" oninput="limitDec(this)" onkeydown="if(event.key===\'Enter\')setLimit(\''+ep+'\')">'
+      + '<button class="btn btn-sm btn-primary" onclick="setLimit(\''+ep+'\')">Set limit</button>'
+      + '<input id="pay-'+ep+'" type="text" inputmode="decimal" placeholder="amount" oninput="limitDec(this)" onkeydown="if(event.key===\'Enter\')doPay(\''+ep+'\')">'
+      + (l.modules?.['resilience']===true
+        ? '<select id="paymethod-'+ep+'" class="btn btn-sm" style="padding:2px 4px"><option value="resilience.local_payment">Resilience</option><option value="payment">Core</option></select>'
+        : '<input type="hidden" id="paymethod-'+ep+'" value="payment">')
+      + '<button class="btn btn-sm btn-primary" onclick="doPay(\''+ep+'\')">Pay</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="removeLink(\''+ep+'\')">Remove</button>'
+      + '<button class="link-expand" onclick="toggleExpand(\''+ep+'\')">'+(isExp?'▲ less':'▼ more')+'</button>'
+      + '</div>';
+    if (isExp) {
+      const mods = l.modules;
+      const demOut = ((l.demurrage||0)/10).toFixed(1);
+      const demIn = ((l.demurrage_in||0)/10).toFixed(1);
+      html += '<div class="link-detail">'
+        + '<div class="link-limits"><span>demurrage out <strong>'+demOut+'%</strong></span><span>in <strong>'+demIn+'%</strong></span><span style="color:var(--fg2)">(per year)</span></div>'
+        + '<div class="link-controls" style="margin-top:6px">'
+        + '<input id="dem-'+ep+'" type="text" inputmode="decimal" placeholder="%/yr" value="'+demOut+'" oninput="this.value=this.value.replace(/[^0-9.]/g,\'\').replace(/(\\..?).*/,\'$1\')" onkeydown="if(event.key===\'Enter\')setDemurrage(\''+ep+'\')">'
+        + '<button class="btn btn-sm btn-primary" onclick="setDemurrage(\''+ep+'\')">Set demurrage</button>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">'
+        + '<span style="font-size:13px">modules</span>'
+        + Object.entries(mods).map(([name, active]) =>
+            '<span class="tag'+(active?'':' tag-pending')+'">'+name+(active?'':' (pending)')+'</span>'
+          ).join('')
+        + '<button class="btn btn-sm" onclick="currentPeer=\''+ep+'\';showModal(\'modules\')">Edit</button>'
+        + '</div>'
+        + (('hierarchy' in mods)
+          ? '<div style="margin-top:8px">'
+            + (isParent
+              ? '<button class="btn btn-sm" onclick="setCcParent(\'\')">Remove parent</button>'
+              : '<button class="btn btn-sm" onclick="setCcParent(\''+ep+'\')">Set parent</button>')
+            + '</div>'
+          : '')
+        + '</div>';
+    }
+    html += '</div>';
+  }
+  c.innerHTML = html;
+}
+
+function toggleExpand(peer) { expanded[peer] = !expanded[peer]; renderLinks(); }
+
+async function setLimit(peer) {
+  const v = toBase(document.getElementById('lim-'+peer).value);
+  if (isNaN(v)||v<0) return;
+  try { await api('/api/account','set_credit_limit',{peer,limit:v}); toast('Limit updated'); refresh(); } catch(e) { toast(e.message); }
+}
+async function doPay(peer) {
+  const v = toBase(document.getElementById('pay-'+peer).value);
+  if (!v||v<=0) return;
+  const method = document.getElementById('paymethod-'+peer).value;
+  try { await api('/api/account', method, {peer, amount: v}); toast('Paid'); refresh(); } catch(e) { toast(e.message); }
+}
+async function setCcParent(peer) {
+  try { await api('/api/account','hierarchy.set_parent',{peer}); toast(peer?'Parent set':'Parent removed'); refresh(); } catch(e) { toast(e.message); }
+}
+async function setDemurrage(peer) {
+  const pct = parseFloat(document.getElementById('dem-'+peer).value);
+  if (isNaN(pct)||pct<0) return;
+  const rate = Math.round(pct * 10);
+  try { await api('/api/account','set_demurrage',{peer,rate}); toast('Demurrage updated'); refresh(); } catch(e) { toast(e.message); }
+}
+async function removeLink(peer) {
+  if (!confirm('Remove link to '+peer+'?')) return;
+  try { await api('/api/account','remove_link',{peer}); toast('Removed'); refresh(); } catch(e) { toast(e.message); }
+}
+
+// Send payment
+async function doSendPayment() {
+  const to = document.getElementById('sp-to').value.trim();
+  const amount = toBase(document.getElementById('sp-amount').value);
+  const proto = document.getElementById('sp-proto').value;
+  const errEl = document.getElementById('sp-error');
+  errEl.textContent = '';
+  if (!to) { errEl.textContent = 'Recipient required'; return; }
+  if (!amount||amount<=0) { errEl.textContent = 'Enter amount'; return; }
+  try {
+    if (proto==='ripple') await api('/api/account','ripple.send_payment',{recipient:to,amount});
+    else if (proto==='resilience') await api('/api/account','resilience.send_payment',{recipient:to,amount});
+    else await api('/api/account','hierarchy.send_payment',{target:to,amount});
+    toast('Payment initiated via '+proto);
+    document.getElementById('sp-to').value = ''; document.getElementById('sp-amount').value = '';
+    refresh();
+  } catch(e) { errEl.textContent = e.message; }
+}
+
+// Pending
+async function refreshPending() {
+  try {
+    const pending = await api('/api/account','pending_links');
+    const sec = document.getElementById('pending-section');
+    const list = document.getElementById('pending-list');
+    if (!pending||!pending.length) { sec.style.display='none'; return; }
+    sec.style.display = '';
+    list.innerHTML = pending.map(p =>
+      '<div class="pending-item"><span>'+esc(p.from)+'</span><div style="display:flex;gap:6px">'
+      + '<button class="btn btn-sm btn-primary" onclick="acceptLink(\''+esc(p.from)+'\')">Accept</button>'
+      + '<button class="btn btn-sm" onclick="dismissLink(\''+esc(p.from)+'\')">Dismiss</button></div></div>'
+    ).join('');
+  } catch(e) {}
+}
+async function acceptLink(peer) { try { await api('/api/account','add_link',{peer}); toast('Accepted'); refresh(); } catch(e) { toast(e.message); } }
+async function dismissLink(peer) { try { await api('/api/account','dismiss_link',{peer}); toast('Dismissed'); refresh(); } catch(e) { toast(e.message); } }
+
+// Pay requests
+async function refreshPayRequests() {
+  const sec = document.getElementById('pay-requests-section');
+  const list = document.getElementById('pay-requests-list');
+  let items = [];
+  try {
+    const rp = await api('/api/account','ripple.pending_requests');
+    if (rp) for (const [id, r] of Object.entries(rp)) {
+      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, proto: 'ripple'});
+    }
+  } catch(e) {}
+  try {
+    const rs = await api('/api/account','resilience.pending_requests');
+    if (rs) for (const [id, r] of Object.entries(rs)) {
+      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, proto: 'resilience'});
+    }
+  } catch(e) {}
+  try {
+    const cc = await api('/api/account','hierarchy.pending_requests');
+    if (cc) for (const [id, r] of Object.entries(cc)) {
+      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, proto: 'hierarchy'});
+    }
+  } catch(e) {}
+  if (!items.length) { sec.style.display='none'; return; }
+  sec.style.display = '';
+  const now = Math.floor(Date.now()/1000);
+  list.innerHTML = items.map(r => {
+    const remaining = r.exp ? Math.max(0, r.exp - now) : 0;
+    const mins = Math.ceil(remaining / 60);
+    const expStr = remaining > 0 ? '<span style="color:var(--fg2);margin-left:8px;font-size:12px">'+mins+' min</span>' : '';
+    if (r.dir === 0) {
+      return '<div class="pending-item"><span><span class="tag" style="margin-right:6px">'+r.proto+'</span>'+toDisplay(r.amount)+' → '+esc(r.peer)+expStr+'</span>'
+        + '<span style="color:var(--fg2);font-size:13px">Waiting</span></div>';
+    }
+    return '<div class="pending-item"><span><span class="tag" style="margin-right:6px">'+r.proto+'</span>'+esc(r.peer)+' → '+toDisplay(r.amount)+expStr+'</span>'
+      + '<button class="btn btn-sm btn-primary" onclick="acceptPayment(\''+r.proto+'\',\''+esc(r.id)+'\')">Accept</button></div>';
+  }).join('');
+}
+
+async function acceptPayment(proto, id) {
+  try {
+    await api('/api/account', proto+'.accept_payment', {id: id});
+    toast('Payment accepted'); refresh();
+  } catch(e) { toast(e.message); }
+}
+
+// Stats
+function renderStats() {
+  const el = document.getElementById('stats-section');
+  const receipts = status.receipts || [];
+  let payments = 0;
+  const mods = ['ripple','loops','hierarchy','triad','resilience'];
+  for (const m of mods) { if (status[m]?.payments) payments += status[m].payments; }
+  el.innerHTML = '<div class="stats">'
+    + '<div class="stat-card"><div class="label">Active payments</div><div class="value">'+payments+'</div></div>'
+    + '<div class="stat-card"><div class="label">Receipts</div><div class="value">'+receipts.length+'</div></div>'
+    + '</div>';
+}
+
+// Receipts
+function renderReceipts() {
+  const receipts = status.receipts || [];
+  const sec = document.getElementById('receipts-section');
+  const list = document.getElementById('receipts-list');
+  if (!receipts.length) { sec.style.display='none'; return; }
+  sec.style.display = '';
+  list.innerHTML = receipts.slice(-10).reverse().map(r => {
+    const rawAmt = r.amount||0;
+    const amt = toDisplay(rawAmt);
+    const cls = rawAmt > 0 ? 'pos' : rawAmt < 0 ? 'neg' : '';
+    const icon = r.status ? '✓' : '✗';
+    const stCls = r.status ? 'pos' : 'neg';
+    const ts = r.timestamp ? new Date(r.timestamp * 1000).toLocaleString() : '';
+    const rid = r.id ? '<span style="color:var(--fg2);font-size:11px;font-family:monospace;margin-left:6px">0x'+esc(r.id.slice(0,8))+'…</span>' : '';
+    const mod = r.module ? '<span class="tag" style="margin-left:6px">'+esc(r.module)+'</span>' : '';
+    return '<div class="receipt-item"><span class="peer"><span class="'+stCls+'" style="margin-right:6px">'+icon+'</span>'+esc(r.peer||r.from||'?')+mod+rid+'<span style="color:var(--fg2);margin-left:8px;font-size:12px">'+ts+'</span></span><span class="amount '+cls+'">'+amt+'</span></div>';
+  }).join('');
+}
+
+// --- Modals (only for complex ops) ---
+let currentPeer = null;
+
+function showModal(type) {
+  const c = document.getElementById('modal-container');
+  let html = '';
+  if (type === 'settings') {
+    const mods = ['ripple','hierarchy','resilience'];
+    let curRate = '';
+    for (const m of mods) { if (status?.[m]?.fee_rate != null) { curRate = (status[m].fee_rate / 10).toFixed(1); break; } }
+    html = modal('Settings',
+      '<label>Fee rate (%)</label>'
+      + '<div style="display:flex;gap:8px;align-items:center"><input id="m-fee-rate" type="text" inputmode="decimal" value="'+curRate+'" placeholder="1.0" oninput="this.value=this.value.replace(/[^0-9.]/g,\'\').replace(/(\\..?).*/,\'$1\')" style="width:80px">'
+      + '<button class="btn btn-sm btn-primary" onclick="submitFeeRate()">Set</button></div>'
+      + '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+      + '<label>Current password</label><input id="m-old-pw" type="password">'
+      + '<label>New password</label><input id="m-new-pw" type="password">'
+    , 'submitChangePw()');
+  }
+  else if (type === 'create-user') {
+    html = modal('Create user', '<label>Username</label><input id="m-cu-user"><label>Password</label><input id="m-cu-pass" type="password">', 'submitCreateUser()');
+  }
+  else if (type === 'reset-pw') {
+    html = modal('Reset password', '<label>User</label><input value="'+esc(arguments[1])+'" readonly><input id="m-rp-user" type="hidden" value="'+esc(arguments[1])+'"><label>New password</label><input id="m-rp-pass" type="password">', 'submitResetPw()');
+  }
+  else if (type === 'add-link') {
+    const all = ['ripple','loops','hierarchy','triad','resilience'];
+    const checks = all.map(m =>
+      '<label style="display:flex;gap:8px;align-items:center;margin-top:6px;font-size:14px;cursor:pointer">'
+      + '<input type="checkbox" class="m-al-mod" value="'+m+'" checked style="width:16px;height:16px;flex-shrink:0"> '+m+'</label>'
+    ).join('');
+    html = modal('Add link',
+      '<label>Peer address</label><input id="m-peer" placeholder="alice@other.example.com">'
+      + '<label>Credit limit (optional)</label><input id="m-limit" type="text" inputmode="decimal" placeholder="0.00" oninput="limitDec(this)">'
+      + '<details style="margin-top:14px"><summary style="font-size:13px;color:var(--fg2);cursor:pointer">Advanced</summary>'
+      + '<label style="margin-top:8px">Modules</label>'+checks+'</details>'
+    , 'submitAddLink()');
+  }
+  else if (type === 'demurrage') {
+    const cur = status.links[currentPeer]?.demurrage || 0;
+    html = modal('Set demurrage', '<label>Peer</label><input value="'+esc(currentPeer)+'" readonly><label>Demurrage rate</label><input id="m-dem" type="number" min="0" value="'+cur+'">', 'submitDemurrage()');
+  }
+  else if (type === 'modules') {
+    const cur = status.links[currentPeer]?.modules;
+    const all = ['ripple','loops','hierarchy','triad','resilience'];
+    const checks = all.map(m => {
+      const enabled = !cur || m in cur;
+      const state = cur && m in cur ? (cur[m] ? ' <span style="color:var(--pos);font-size:12px">active</span>' : ' <span style="color:var(--fg2);font-size:12px;font-style:italic">pending</span>') : '';
+      return '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:14px;cursor:pointer">'
+        + '<input type="checkbox" class="m-mod-check" value="'+m+'" '+(enabled?'checked':'')+' style="width:16px;height:16px;flex-shrink:0"> '+m+state+'</label>';
+    }).join('');
+    html = modal('Modules', '<p style="font-size:13px;color:var(--fg2)">Select which modules to enable on this link.</p>'+checks, 'submitModules()');
+  }
+  c.innerHTML = html; c.style.display = '';
+  const first = c.querySelector('input:not([readonly])'); if (first) first.focus();
+}
+
+function modal(title, body, onSubmit) {
+  return '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>'+title+'</h3>'+body
+    + '<div id="m-error" class="error"></div><div class="actions"><button class="btn" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="'+onSubmit+'">OK</button></div></div></div>';
+}
+function closeModal() { const c=document.getElementById('modal-container'); c.style.display='none'; c.innerHTML=''; }
+function mErr(msg) { document.getElementById('m-error').textContent=msg; }
+
+async function submitFeeRate() {
+  const pct = parseFloat(document.getElementById('m-fee-rate').value);
+  if (isNaN(pct) || pct < 0) { mErr('Invalid rate'); return; }
+  const rate = Math.round(pct * 10);
+  const mods = ['ripple','hierarchy','resilience'];
+  let set = 0;
+  for (const m of mods) {
+    try { await api('/api/account', m+'.set_fee_rate', {rate}); set++; } catch(e) {}
+  }
+  if (set) { toast('Fee rate updated'); refresh(); } else { mErr('No module available'); }
+}
+
+async function submitChangePw() {
+  const old_password = document.getElementById('m-old-pw').value, new_password = document.getElementById('m-new-pw').value;
+  if (!new_password) { mErr('New password required'); return; }
+  try { await api('/api/auth','change_password',{Old:old_password,New:new_password}); closeModal(); toast('Password changed'); } catch(e) { mErr(e.message); }
+}
+async function submitCreateUser() {
+  const user=document.getElementById('m-cu-user').value.trim(), pass=document.getElementById('m-cu-pass').value;
+  if (!user) { mErr('Username required'); return; }
+  try { await adminApi('create_user',{username:user,password:pass}); closeModal(); toast('User created'); refreshAdmin(); } catch(e) { mErr(e.message); }
+}
+async function submitResetPw() {
+  const user=document.getElementById('m-rp-user').value, pass=document.getElementById('m-rp-pass').value;
+  try { await adminApi('reset_password',{username:user,password:pass}); closeModal(); toast('Password reset'); } catch(e) { mErr(e.message); }
+}
+async function submitAddLink() {
+  const peer=document.getElementById('m-peer').value.trim(), limit=parseInt(document.getElementById('m-limit').value)||0;
+  if (!peer) { mErr('Peer required'); return; }
+  const checks=document.querySelectorAll('.m-al-mod');
+  const selected=Array.from(checks).filter(c=>c.checked).map(c=>c.value);
+  try {
+    const payload={peer, modules:selected}; if (limit>0) payload.credit_limit=toBase(limit);
+    await api('/api/account','add_link',payload); closeModal(); toast('Link request sent'); refresh();
+  } catch(e) { mErr(e.message); }
+}
+async function submitDemurrage() {
+  const rate=parseInt(document.getElementById('m-dem').value);
+  if (isNaN(rate)||rate<0) { mErr('Invalid'); return; }
+  try { await api('/api/account','set_demurrage',{peer:currentPeer,rate}); closeModal(); toast('Updated'); refresh(); } catch(e) { mErr(e.message); }
+}
+async function submitModules() {
+  const checks=document.querySelectorAll('.m-mod-check');
+  const selected=Array.from(checks).filter(c=>c.checked).map(c=>c.value);
+  const modules=selected;
+  try { await api('/api/account','set_modules',{peer:currentPeer,modules}); closeModal(); toast('Updated'); refresh(); } catch(e) { mErr(e.message); }
+}
+
+function limitDec(el) { el.value = el.value.replace(/[^0-9.]/g,'').replace(/(\...?).*/,'$1'); }
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+setInterval(() => { if (token && !isAdmin && !document.activeElement?.matches('input,select')) refresh(); }, 5000);
+if (token && username) showMain(); else showLogin();
+</script>
+</body>
+</html>

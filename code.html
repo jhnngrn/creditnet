@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>creditnet — source</title>
+<style>
+:root {
+  --bg: #fff; --bg2: #f7f7f7; --fg: #1a1a1a; --fg2: #666;
+  --border: #e0e0e0; --accent: #2563eb; --sel: #eef4ff;
+  --line-fg: #aaa;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1a1a; --bg2: #222; --fg: #e5e5e5; --fg2: #999;
+    --border: #333; --accent: #60a5fa; --sel: #1e293b;
+    --line-fg: #555;
+  }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--fg); height: 100vh; display: flex; flex-direction: column; }
+header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+header h1 { font-size: 18px; font-weight: 700; }
+header h1 span { font-weight: 400; color: var(--fg2); font-size: 14px; }
+.dl-btn { padding: 6px 14px; font-size: 13px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.dl-btn:hover { opacity: 0.9; }
+.main { display: flex; flex: 1; overflow: hidden; }
+.tree { width: 240px; border-right: 1px solid var(--border); overflow-y: auto; padding: 8px 0; flex-shrink: 0; font-size: 13px; }
+.tree-item { padding: 3px 12px 3px calc(12px + var(--depth, 0) * 16px); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+.tree-item:hover { background: var(--bg2); }
+.tree-item.active { background: var(--sel); color: var(--accent); }
+.tree-item.dir { color: var(--fg2); font-weight: 600; }
+.tree-item.dir::before { content: "\25B8 "; font-size: 10px; }
+.tree-item.dir.open::before { content: "\25BE "; }
+.viewer { flex: 1; overflow: auto; background: var(--bg2); }
+.file-header { padding: 8px 16px; font-size: 12px; color: var(--fg2); border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 1; }
+.code { font-family: "SF Mono", "Fira Code", "Consolas", monospace; font-size: 13px; line-height: 1.5; padding: 8px 0; }
+.code-line { display: flex; }
+.code-line:hover { background: var(--sel); }
+.line-num { color: var(--line-fg); text-align: right; padding: 0 12px 0 16px; min-width: 50px; user-select: none; flex-shrink: 0; }
+.line-content { padding-right: 16px; white-space: pre; tab-size: 4; -moz-tab-size: 4; }
+.empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--fg2); font-size: 14px; }
+.stats { font-size: 12px; color: var(--fg2); }
+.hl-kw { color: #7c3aed; } .hl-str { color: #059669; } .hl-cmt { color: #9ca3af; } .hl-num { color: #d97706; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hl-kw { color: #a78bfa; }
+  :root:not([data-theme="light"]) .hl-str { color: #34d399; }
+  :root:not([data-theme="light"]) .hl-cmt { color: #6b7280; }
+  :root:not([data-theme="light"]) .hl-num { color: #fbbf24; }
+}
+@media (max-width: 600px) {
+  .tree { width: 180px; }
+  .code { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>creditnet <span>source</span></h1>
+  <div style="display:flex;gap:12px;align-items:center">
+    <span class="stats" id="stats"></span>
+    <button class="dl-btn" onclick="downloadZip()">Download ZIP</button>
+  </div>
+</header>
+<div class="main">
+  <div class="tree" id="tree"></div>
+  <div class="viewer" id="viewer"><div class="empty">Loading...</div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const PATHS = [
+  "README.md","cmd/base/main.go","cmd/hierarchy/main.go","cmd/creditnet/main.go",
+  "cmd/loops/main.go","cmd/triad/main.go","cmd/resilience/main.go","cmd/ripple/main.go",
+  "core/account.go","core/demurrage.go","core/handlers.go","core/keys.go","core/message.go",
+  "core/run.go","core/server.go","core/store.go","core/sync.go","core/types.go","core/users.go",
+  "code.html","hierarchy/app.go","go.mod","jlib/jlib.go","jlib/pathfinder.go","jlib/settlement.go",
+  "loops/app.go","triad/app.go","resilience/app.go","ripple/app.go","ui.html"
+];
+
+const files = {};
+const cache = {};
+let activeEl = null;
+
+function buildTree() {
+  const tree = {};
+  for (const path of PATHS) {
+    const parts = path.split('/');
+    let node = tree;
+    for (const p of parts.slice(0, -1)) {
+      if (!node[p]) node[p] = {};
+      node = node[p];
+    }
+    node[parts[parts.length - 1]] = null;
+  }
+  return tree;
+}
+
+function renderTree(node, container, path, depth) {
+  const keys = Object.keys(node).sort((a, b) => {
+    const aDir = node[a] !== null, bDir = node[b] !== null;
+    if (aDir !== bDir) return aDir ? -1 : 1;
+    return a.localeCompare(b);
+  });
+  for (const key of keys) {
+    const fullPath = path ? path + '/' + key : key;
+    const isDir = node[key] !== null;
+    const el = document.createElement('div');
+    el.className = 'tree-item' + (isDir ? ' dir' : '');
+    el.style.setProperty('--depth', depth);
+    el.textContent = key;
+    container.appendChild(el);
+    if (isDir) {
+      const children = document.createElement('div');
+      children.style.display = 'none';
+      container.appendChild(children);
+      renderTree(node[key], children, fullPath, depth + 1);
+      el.onclick = (e) => {
+        e.stopPropagation();
+        el.classList.toggle('open');
+        children.style.display = children.style.display === 'none' ? '' : 'none';
+      };
+    } else {
+      el.onclick = () => showFile(fullPath, el);
+    }
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightGo(line) {
+  if (/^\s*\/\//.test(line)) return '<span class="hl-cmt">' + escapeHtml(line) + '</span>';
+  let out = escapeHtml(line);
+  const strs = [];
+  out = out.replace(/("(?:[^"\\]|\\.)*"|`[^`]*`)/g, (m) => { strs.push(m); return '\x00S' + (strs.length-1) + '\x00'; });
+  out = out.replace(/\b(func|return|if|else|for|range|switch|case|default|var|const|type|struct|interface|import|package|defer|go|select|chan|map|break|continue|nil|true|false|append|delete|len|make|new|uint8|uint64|int64|int|string|bool|float64|byte|error)\b/g, '<span class="hl-kw">$1</span>');
+  out = out.replace(/\b(\d+)\b/g, '<span class="hl-num">$1</span>');
+  out = out.replace(/\x00S(\d+)\x00/g, (_, i) => '<span class="hl-str">' + strs[+i] + '</span>');
+  return out;
+}
+
+async function showFile(path, el) {
+  if (activeEl) activeEl.classList.remove('active');
+  el.classList.add('active');
+  activeEl = el;
+  const viewer = document.getElementById('viewer');
+  if (!cache[path]) {
+    viewer.innerHTML = '<div class="empty">Loading...</div>';
+    try {
+      cache[path] = await fetch(path).then(r => { if (!r.ok) throw r; return r.text(); });
+    } catch(e) {
+      viewer.innerHTML = '<div class="empty">Failed to load ' + path + '</div>';
+      return;
+    }
+  }
+  const content = cache[path];
+  const lines = content.split('\n');
+  const isGo = path.endsWith('.go');
+  viewer.innerHTML = '<div class="file-header">' + path + ' — ' + lines.length + ' lines</div>'
+    + '<div class="code">' + lines.map((line, i) =>
+      '<div class="code-line"><span class="line-num">' + (i+1) + '</span><span class="line-content">'
+      + (isGo ? highlightGo(line) : escapeHtml(line)) + '</span></div>'
+    ).join('') + '</div>';
+  viewer.scrollTop = 0;
+}
+
+function downloadZip() {
+  const zip = new JSZip();
+  const promises = PATHS.map(p =>
+    (cache[p] ? Promise.resolve(cache[p]) : fetch(p).then(r => r.text()))
+      .then(content => zip.file('creditnet/' + p, content))
+  );
+  Promise.all(promises).then(() =>
+    zip.generateAsync({type: 'blob'}).then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'creditnet.zip';
+      a.click();
+    })
+  );
+}
+
+document.getElementById('stats').textContent = PATHS.length + ' files';
+renderTree(buildTree(), document.getElementById('tree'), '', 0);
+const items = document.querySelectorAll('.tree-item:not(.dir)');
+for (const item of items) { if (item.textContent === 'README.md') { item.click(); break; } }
+</script>
+</body>
+</html>
