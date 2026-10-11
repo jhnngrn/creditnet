@@ -94,7 +94,7 @@ func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, paylo
 		if json.Unmarshal(payload, &m) != nil {
 			return false, fmt.Errorf("bad payload")
 		}
-		if m.Amount == 0 || n.bw(peer, IN) < m.Amount {
+		if m.Amount <= 0 || n.bw(peer, IN) < m.Amount {
 			return false, nil
 		}
 		ls.AddBalance(m.Amount, ts)
@@ -115,6 +115,7 @@ func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, paylo
 		if json.Unmarshal(payload, &m) != nil {
 			return false, fmt.Errorf("bad payload")
 		}
+		if m.Amount <= 0 { return false, nil }
 		ls.AddBalance(m.Amount, ts)
 		return true, nil
 

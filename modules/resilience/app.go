@@ -7,6 +7,7 @@ package resilience
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"creditnet/core"
@@ -309,7 +310,10 @@ func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload j
 	case "direct_payment":
 		var m struct{ Amount uint64 `json:"amount"`; Tax uint64 `json:"tax"` }
 		if json.Unmarshal(payload, &m) != nil { return false, fmt.Errorf("bad payload") }
+		if m.Amount == 0 { return false, nil }
 		total := m.Amount + m.Tax
+		if total < m.Amount { return false, nil }
+		if total > uint64(math.MaxInt64) { return false, nil }
 		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		balBefore := ls.Balance
 		ls.AddBalance(int64(total), ts)
@@ -322,6 +326,7 @@ func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload j
 	case "redistribution":
 		var m struct{ Amount uint64 `json:"amount"` }
 		if json.Unmarshal(payload, &m) != nil { return false, fmt.Errorf("bad payload") }
+		if m.Amount == 0 || m.Amount > uint64(math.MaxInt64) { return false, nil }
 		oldBal := ls.Balance
 		ls.AddBalance(int64(m.Amount), ts)
 		// Cascade: if this reduced negative balance, redistribute onward.
