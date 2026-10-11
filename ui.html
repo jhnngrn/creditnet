@@ -507,7 +507,8 @@ function renderReceipts() {
     const ts = r.timestamp ? new Date(r.timestamp * 1000).toLocaleString() : '';
     const rid = r.id ? '<span style="color:var(--fg2);font-size:11px;font-family:monospace;margin-left:6px">0x'+esc(r.id.slice(0,8))+'…</span>' : '';
     const mod = r.module ? '<span class="tag" style="margin-left:6px">'+esc(r.module)+'</span>' : '';
-    return '<div class="receipt-item"><span class="peer"><span class="'+stCls+'" style="margin-right:6px">'+icon+'</span>'+esc(r.peer||r.from||'?')+mod+rid+'<span style="color:var(--fg2);margin-left:8px;font-size:12px">'+ts+'</span></span><span class="amount '+cls+'">'+amt+'</span></div>';
+    const proof = r.preimage ? '<div style="color:var(--fg2);font-size:11px;font-family:monospace;margin-top:2px">proof: 0x'+esc(r.preimage.slice(0,16))+'…</div>' : '';
+    return '<div class="receipt-item" style="flex-wrap:wrap"><span class="peer"><span class="'+stCls+'" style="margin-right:6px">'+icon+'</span>'+esc(r.peer||r.from||'?')+mod+rid+'<span style="color:var(--fg2);margin-left:8px;font-size:12px">'+ts+'</span></span><span class="amount '+cls+'">'+amt+'</span>'+proof+'</div>';
   }).join('');
 }
 
