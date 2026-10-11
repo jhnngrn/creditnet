@@ -45,7 +45,7 @@ func (l *Link) MaterializeDemurrage(ts int64) {
 	if elapsed <= 0 {
 		return
 	}
-	var rate uint64
+	var rate int64
 	if l.Balance > 0 {
 		rate = l.Demurrage // peer owes me, my rate
 	} else {
@@ -59,7 +59,7 @@ func (l *Link) MaterializeDemurrage(ts int64) {
 	if abs < 0 {
 		abs = -abs
 	}
-	decay := demurrageDecay(uint64(abs), rate, elapsed)
+	decay := demurrageDecay(uint64(abs), uint64(rate), elapsed)
 	if decay >= uint64(abs) {
 		l.Balance = 0
 	} else if l.Balance > 0 {
@@ -86,7 +86,7 @@ func (l *Link) EffectiveBalance(nowSecs int64) int64 {
 	if elapsed <= 0 {
 		return l.Balance
 	}
-	var rate uint64
+	var rate int64
 	if l.Balance > 0 {
 		rate = l.Demurrage
 	} else {
@@ -99,7 +99,7 @@ func (l *Link) EffectiveBalance(nowSecs int64) int64 {
 	if abs < 0 {
 		abs = -abs
 	}
-	decay := demurrageDecay(uint64(abs), rate, elapsed)
+	decay := demurrageDecay(uint64(abs), uint64(rate), elapsed)
 	if decay >= uint64(abs) {
 		return 0
 	}

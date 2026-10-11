@@ -25,29 +25,29 @@ func (n *node) pendingBalance(peer string, side int) int64 {
 		debt = -bal
 	}
 	for _, mod := range n.modules {
-		debt -= int64(mod.Reserved(peer, side))
+		debt -= mod.Reserved(peer, side)
 	}
 	return debt
 }
 
 // bw = credit_limit + pendingBalance, floored at 0.
-func (n *node) bw(peer string, side int) uint64 {
+func (n *node) bw(peer string, side int) int64 {
 	l := n.links[peer]
 	if l == nil {
 		return 0
 	}
 	var limit int64
 	if side == OUT {
-		limit = int64(l.CreditLimitIn)
+		limit = l.CreditLimitIn
 	} else {
-		limit = int64(l.CreditLimit)
+		limit = l.CreditLimit
 	}
 	// pendingBalance already uses EffectiveBalance
 	total := limit + n.pendingBalance(peer, side)
 	if total < 0 {
 		return 0
 	}
-	return uint64(total)
+	return total
 }
 
 func (n *node) bwFunc() BandwidthFunc             { return n.bw }
@@ -69,7 +69,7 @@ func (n *node) addReceipt(id, peer, module string, amount int64, ok bool) {
 
 func (n *node) receiptFunc() ReceiptFunc { return n.addReceipt }
 func (n *node) transferFunc() TransferFunc {
-	return func(peer string, amount uint64) { n.transferOutbox[peer] += amount }
+	return func(peer string, amount int64) { n.transferOutbox[peer] += amount }
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ func (n *node) transferFunc() TransferFunc {
 func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, payload json.RawMessage, ts int64) (bool, error) {
 	switch method {
 	case "sync_trustline":
-		var m struct{ Amount uint64 }
+		var m struct{ Amount int64 }
 		if json.Unmarshal(payload, &m) != nil {
 			return false, fmt.Errorf("bad payload")
 		}
@@ -87,19 +87,19 @@ func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, paylo
 		return true, nil
 
 	case "payment":
-		var m struct{ Amount uint64 }
+		var m struct{ Amount int64 }
 		if json.Unmarshal(payload, &m) != nil {
 			return false, fmt.Errorf("bad payload")
 		}
 		if m.Amount == 0 || n.bw(peer, IN) < m.Amount {
 			return false, nil
 		}
-		ls.AddBalance(int64(m.Amount), ts)
-		n.addReceipt("", peer, "", int64(m.Amount), true)
+		ls.AddBalance(m.Amount, ts)
+		n.addReceipt("", peer, "", m.Amount, true)
 		return true, nil
 
 	case "sync_demurrage":
-		var m struct{ Rate uint64 }
+		var m struct{ Rate int64 }
 		if json.Unmarshal(payload, &m) != nil {
 			return false, fmt.Errorf("bad payload")
 		}
@@ -108,11 +108,11 @@ func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, paylo
 		return true, nil
 
 	case "transfer":
-		var m struct{ Amount uint64 }
+		var m struct{ Amount int64 }
 		if json.Unmarshal(payload, &m) != nil {
 			return false, fmt.Errorf("bad payload")
 		}
-		ls.AddBalance(int64(m.Amount), ts)
+		ls.AddBalance(m.Amount, ts)
 		return true, nil
 
 	case "sync_module":
@@ -152,7 +152,7 @@ func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, paylo
 func (n *node) handleCoreSyncResponse(peer string, ls *Link, method string, payload json.RawMessage, ok bool, ts int64) {
 	switch method {
 	case "sync_trustline":
-		var m struct{ Amount uint64 }
+		var m struct{ Amount int64 }
 		json.Unmarshal(payload, &m)
 		if limit, exists := n.limitOutbox[peer]; exists && limit == m.Amount {
 			delete(n.limitOutbox, peer)
@@ -162,18 +162,18 @@ func (n *node) handleCoreSyncResponse(peer string, ls *Link, method string, payl
 		}
 
 	case "payment":
-		var m struct{ Amount uint64 }
+		var m struct{ Amount int64 }
 		json.Unmarshal(payload, &m)
 		delete(n.directOutbox, peer)
 		if ok {
-			ls.AddBalance(-int64(m.Amount), ts)
-			n.addReceipt("", peer, "", -int64(m.Amount), true)
+			ls.AddBalance(-m.Amount, ts)
+			n.addReceipt("", peer, "", -m.Amount, true)
 		} else {
-			n.addReceipt("", peer, "", -int64(m.Amount), false)
+			n.addReceipt("", peer, "", -m.Amount, false)
 		}
 
 	case "sync_demurrage":
-		var m struct{ Rate uint64 }
+		var m struct{ Rate int64 }
 		json.Unmarshal(payload, &m)
 		if rate, exists := n.demurrageOutbox[peer]; exists && rate == m.Rate {
 			delete(n.demurrageOutbox, peer)
@@ -184,7 +184,7 @@ func (n *node) handleCoreSyncResponse(peer string, ls *Link, method string, payl
 		}
 
 	case "transfer":
-		var m struct{ Amount uint64 }
+		var m struct{ Amount int64 }
 		json.Unmarshal(payload, &m)
 		if n.transferOutbox[peer] >= m.Amount {
 			n.transferOutbox[peer] -= m.Amount
@@ -192,7 +192,7 @@ func (n *node) handleCoreSyncResponse(peer string, ls *Link, method string, payl
 			n.transferOutbox[peer] = 0
 		}
 		if n.transferOutbox[peer] == 0 { delete(n.transferOutbox, peer) }
-		ls.AddBalance(-int64(m.Amount), ts)
+		ls.AddBalance(-m.Amount, ts)
 
 	case "sync_module":
 		var m struct {
@@ -236,13 +236,13 @@ func (n *node) handleCoreMsgRequest(sender, method string) {
 func (n *node) nextTx(peer string) *QueuedMsg {
 	// Core outboxes first — rare, one-shot, get them out of the way.
 	if amount, ok := n.directOutbox[peer]; ok {
-		return &QueuedMsg{Method: "payment", Payload: Enc(map[string]uint64{"amount": amount})}
+		return &QueuedMsg{Method: "payment", Payload: Enc(map[string]int64{"amount": amount})}
 	}
 	if limit, ok := n.limitOutbox[peer]; ok {
-		return &QueuedMsg{Method: "sync_trustline", Payload: Enc(map[string]uint64{"amount": limit})}
+		return &QueuedMsg{Method: "sync_trustline", Payload: Enc(map[string]int64{"amount": limit})}
 	}
 	if rate, ok := n.demurrageOutbox[peer]; ok {
-		return &QueuedMsg{Method: "sync_demurrage", Payload: Enc(map[string]uint64{"rate": rate})}
+		return &QueuedMsg{Method: "sync_demurrage", Payload: Enc(map[string]int64{"rate": rate})}
 	}
 	link := n.links[peer]
 
@@ -264,7 +264,7 @@ func (n *node) nextTx(peer string) *QueuedMsg {
 
 	// Internal transfer last — background compensation, lowest priority.
 	if amount, ok := n.transferOutbox[peer]; ok && amount >= TransferThreshold {
-		return &QueuedMsg{Method: "transfer", Payload: Enc(map[string]uint64{"amount": amount})}
+		return &QueuedMsg{Method: "transfer", Payload: Enc(map[string]int64{"amount": amount})}
 	}
 	return nil
 }

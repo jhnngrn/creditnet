@@ -96,7 +96,7 @@ func (e *Engine) OnRemoveLink(peer string) {
 	}
 }
 
-func (e *Engine) Reserved(peer string, side int) uint64 {
+func (e *Engine) Reserved(peer string, side int) int64 {
 	var total uint64
 	// Committed paths
 	for _, p := range e.Paths {
@@ -116,7 +116,7 @@ func (e *Engine) Reserved(peer string, side int) uint64 {
 		if s.Account != peer { continue }
 		total += p.Amount + s.Fee + s.Penalty
 	}
-	return total
+	return int64(total)
 }
 
 func SyncMethods() []string {

@@ -72,7 +72,7 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 func (n *node) accountAddLink(raw json.RawMessage, ops AccountOps) (json.RawMessage, error) {
 	var m struct {
 		Peer    string   `json:"peer"`
-		Limit   uint64   `json:"credit_limit"`
+		Limit   int64    `json:"credit_limit"`
 		Modules []string `json:"modules"`
 	}
 	if json.Unmarshal(raw, &m) != nil { return nil, fmt.Errorf("bad request") }
@@ -107,7 +107,7 @@ func (n *node) accountRemoveLink(raw json.RawMessage, ops AccountOps) (json.RawM
 }
 
 func (n *node) accountSetCreditLimit(raw json.RawMessage) (json.RawMessage, error) {
-	var m struct{ Peer string `json:"peer"`; Limit uint64 `json:"limit"` }
+	var m struct{ Peer string `json:"peer"`; Limit int64 `json:"limit"` }
 	if json.Unmarshal(raw, &m) != nil { return nil, fmt.Errorf("bad request") }
 	peer := strings.ToLower(m.Peer)
 	if n.links[peer] == nil { return nil, fmt.Errorf("no link to %s", peer) }
@@ -144,7 +144,7 @@ func (n *node) accountPendingLinks() json.RawMessage {
 }
 
 func (n *node) accountDirectPayment(raw json.RawMessage) (json.RawMessage, error) {
-	var m struct{ Peer string `json:"peer"`; Amount uint64 `json:"amount"` }
+	var m struct{ Peer string `json:"peer"`; Amount int64 `json:"amount"` }
 	if json.Unmarshal(raw, &m) != nil { return nil, fmt.Errorf("bad request") }
 	peer := strings.ToLower(m.Peer)
 	if n.links[peer] == nil { return nil, fmt.Errorf("no link to %s", peer) }
@@ -157,7 +157,7 @@ func (n *node) accountDirectPayment(raw json.RawMessage) (json.RawMessage, error
 func (n *node) accountSetDemurrage(raw json.RawMessage) (json.RawMessage, error) {
 	var m struct {
 		Peer string `json:"peer"`
-		Rate uint64 `json:"rate"`
+		Rate int64  `json:"rate"`
 	}
 	if json.Unmarshal(raw, &m) != nil {
 		return nil, fmt.Errorf("bad request")

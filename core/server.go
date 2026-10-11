@@ -232,10 +232,10 @@ type node struct {
 	sends map[string]*peerSend
 
 	// Core-owned state (shared concerns, not duplicated in modules).
-	limitOutbox     map[string]uint64
-	directOutbox    map[string]uint64
-	demurrageOutbox map[string]uint64
-	transferOutbox  map[string]uint64
+	limitOutbox     map[string]int64
+	directOutbox    map[string]int64
+	demurrageOutbox map[string]int64
+	transferOutbox  map[string]int64
 	moduleOutbox    map[string]map[string]bool // peer → module → activate(true)/deactivate(false)
 		linkRequests  map[string]int64
 	receipts      []Receipt
@@ -257,7 +257,7 @@ func (s *Server) makeNode(id string, raw json.RawMessage) *node {
 	n := &node{
 		srv: s, id: id, links: st.Links, receipts: st.Receipts,
 		modules: make([]Module, len(s.regs)), sends: map[string]*peerSend{},
-		limitOutbox: map[string]uint64{}, directOutbox: map[string]uint64{}, demurrageOutbox: map[string]uint64{}, transferOutbox: map[string]uint64{}, moduleOutbox: map[string]map[string]bool{}, linkRequests: map[string]int64{},
+		limitOutbox: map[string]int64{}, directOutbox: map[string]int64{}, demurrageOutbox: map[string]int64{}, transferOutbox: map[string]int64{}, moduleOutbox: map[string]map[string]bool{}, linkRequests: map[string]int64{},
 	}
 	// Migrate links with nil Modules (pre-bilateral-activation data).
 	for _, link := range n.links {

@@ -192,7 +192,7 @@ func (e *Engine) MsgSearch(sender string, raw json.RawMessage) {
 		if !ok { return }
 		if e.FeeRate > 0 && !validateRate(m.Fee, m.Amount, e.FeeRate) { return }
 		if e.PenaltyRate > 0 && !validateRate(m.Penalty, m.Amount, e.PenaltyRate) { return }
-		if e.bwFn(sender, int(dir)) < total { return }
+		if e.bwFn(sender, int(dir)) < int64(total) { return }
 		if e.linkSlots(sender, false) >= e.MaxPerLink { return }
 
 		p = &Path{Amount: m.Amount, Fee: m.Fee, Penalty: m.Penalty, Hops: m.Hops}
@@ -284,7 +284,7 @@ func (e *Engine) floodSearch(id string, p *Path, dir uint8) {
 			ID: id, Direction: dir, Gas: s,
 			Amount: p.Amount, Fee: p.Fee, Penalty: p.Penalty, Hops: p.Hops + 1,
 		}))
-		if e.TransferFn != nil { e.TransferFn(peer, s) }
+		if e.TransferFn != nil { e.TransferFn(peer, int64(s)) }
 		p.Gas -= s
 	}
 }
@@ -298,7 +298,7 @@ func (e *Engine) climbSearch(id string, p *Path, dir uint8) {
 		return
 	}
 	p.Depth++
-	if e.TransferFn != nil { e.TransferFn(parent, e.GasCharge) }
+	if e.TransferFn != nil { e.TransferFn(parent, int64(e.GasCharge)) }
 	e.sendFn(parent, "search", core.Enc(SearchMsg{
 		ID: id, Direction: dir, Gas: p.Gas,
 		Amount: p.Amount, Fee: p.Fee, Penalty: p.Penalty, Hops: p.Hops,
@@ -452,11 +452,11 @@ func (e *Engine) MsgPrepare(sender string, raw json.RawMessage) {
 	// Bandwidth checks before peer assignment to avoid poisoning Peer[0].
 	inTotal, ok := e.OverflowCheck(p.Amount, p.Fee, p.Penalty, uint64(p.Hops)+1)
 	if !ok { return }
-	if e.bwFn(sender, core.IN) < inTotal { return }
+	if e.bwFn(sender, core.IN) < int64(inTotal) { return }
 	if p.Hops > 0 {
 		outTotal, ok := e.OverflowCheck(p.Amount, p.Fee, p.Penalty, uint64(p.Hops))
 		if !ok { return }
-		if p.Peer[1] != "" && e.bwFn(p.Peer[1], core.OUT) < outTotal { return }
+		if p.Peer[1] != "" && e.bwFn(p.Peer[1], core.OUT) < int64(outTotal) { return }
 	}
 
 	p.Peer[0] = sender

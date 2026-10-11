@@ -99,7 +99,7 @@ func (a *App) NextTx(peer string) *core.QueuedMsg {
 	}
 	return a.Engine.NextTx(peer)
 }
-func (a *App) Reserved(peer string, side int) uint64   { return a.Engine.Reserved(peer, side) }
+func (a *App) Reserved(peer string, side int) int64   { return a.Engine.Reserved(peer, side) }
 
 func (a *App) OnRemoveLink(peer string) {
 	a.Engine.OnRemoveLink(peer)
@@ -305,7 +305,7 @@ func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload j
 		var m struct{ Amount uint64 `json:"amount"`; Tax uint64 `json:"tax"` }
 		if json.Unmarshal(payload, &m) != nil { return false, fmt.Errorf("bad payload") }
 		total := m.Amount + m.Tax
-		if a.bwFn(peer, core.IN) < total { return false, nil }
+		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		balBefore := ls.Balance
 		ls.AddBalance(int64(total), ts)
 		rate := float64(0)

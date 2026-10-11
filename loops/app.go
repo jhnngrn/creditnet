@@ -156,7 +156,7 @@ func (a *App) NextTx(peer string) *core.QueuedMsg {
 	return nil
 }
 
-func (a *App) Reserved(peer string, side int) uint64 {
+func (a *App) Reserved(peer string, side int) int64 {
 	var total uint64
 	for _, op := range a.Clearings {
 		if op.Side[side].Account == peer { total += op.Amount + op.Side[side].Penalty }
@@ -166,7 +166,7 @@ func (a *App) Reserved(peer string, side int) uint64 {
 		if side == core.IN && p.Peer[0] == peer { total += p.Amount }
 		if side == core.OUT && p.Peer[1] == peer { total += p.Amount }
 	}
-	return total
+	return int64(total)
 }
 
 func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
@@ -251,7 +251,7 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount, penalty u
 		if p != nil { hops = p.Hops; delete(a.paths, id) }
 		inPen := penalty * uint64(hops+1)
 		total := amount + inPen
-		if a.bwFn(peer, core.IN) < total { return false, nil }
+		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: inPen}
 		a.scheduleCleanup(id, core.IN)
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
@@ -268,7 +268,7 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount, penalty u
 
 	inPen := penalty * uint64(hops+1)
 	total := amount + inPen
-	if a.bwFn(peer, core.IN) < total { return false, nil }
+	if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 
 	outPen := penalty * uint64(hops)
 	op := &Clearing{ID: id, Amount: amount, PenaltyRate: penalty, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: inPen}, {}}}
@@ -341,7 +341,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				}
 				// Final if chain exhausted or not enough bandwidth for another chunk.
 				avl := a.bwFn(outPeer, core.OUT)
-				nextOp.Final = nextStep <= 2 || avl < nextOp.Amount
+				nextOp.Final = nextStep <= 2 || avl < int64(nextOp.Amount)
 				core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
 				a.kicks = append(a.kicks, outPeer)
 			}
@@ -705,9 +705,9 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 	}
 
 	if p.Peer[1] == "" { return }
-	if a.bwFn(sender, core.IN) < m.Amount { return }
+	if a.bwFn(sender, core.IN) < int64(m.Amount) { return }
 	avl := a.bwFn(p.Peer[1], core.OUT)
-	if avl < m.Amount { m.Amount = avl }
+	if avl < int64(m.Amount) { m.Amount = uint64(avl) }
 	if m.Amount > ChunkSize { m.Amount = ChunkSize }
 	if m.Amount == 0 { return }
 	p.Commit = true; p.Amount = m.Amount
@@ -744,7 +744,7 @@ func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, d
 		a.sendFn(peer, "search", core.Enc(SearchMsg{
 			ID: searchID, Amount: amount, Penalty: p.Penalty, Depth: depth + 1, Gas: share, Direction: dir, Hops: p.Hops + 1,
 		}))
-		a.transferFn(peer, share)
+		a.transferFn(peer, int64(share))
 		gas -= share
 	}
 }

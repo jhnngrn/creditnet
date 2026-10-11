@@ -104,13 +104,13 @@ type Link struct {
 	Sync SyncState `json:"sync"`
 
 	Balance       int64  `json:"balance"`
-	CreditLimit   uint64 `json:"credit_limit"`
-	CreditLimitIn uint64 `json:"credit_limit_in"`
+	CreditLimit   int64 `json:"credit_limit"`
+	CreditLimitIn int64 `json:"credit_limit_in"`
 
 	// Demurrage: rate in promille per year (10 = 1%/year). 0 = off.
 	// Demurrage applies to peer's debt to me; DemurrageIn applies to my debt to peer.
-	Demurrage     uint64 `json:"demurrage"`
-	DemurrageIn   uint64 `json:"demurrage_in"`
+	Demurrage     int64 `json:"demurrage"`
+	DemurrageIn   int64 `json:"demurrage_in"`
 	DemurrageTime int64  `json:"demurrage_time"` // last materialized (seconds)
 
 	Modules       map[string]bool `json:"modules"` // module → active(true)/pending(false)
@@ -145,7 +145,7 @@ type DeferSendFunc func(to, method string, payload json.RawMessage)
 type ScheduleFunc func(after time.Duration, fn func()) *time.Timer
 
 // BandwidthFunc returns available bandwidth on a link (credit_limit + pending_balance).
-type BandwidthFunc func(peer string, side int) uint64
+type BandwidthFunc func(peer string, side int) int64
 
 // PendingBalanceFunc returns the effective debt on a link after all modules'
 // reservations are subtracted. Triad uses this: it asks "how much debt
@@ -157,7 +157,7 @@ type PendingBalanceFunc func(peer string, side int) int64
 type ReceiptFunc func(id, peer, module string, amount int64, ok bool)
 
 // TransferFunc buffers a non-receipted balance transfer to a peer. Core accumulates and syncs via transfer.
-type TransferFunc func(peer string, amount uint64)
+type TransferFunc func(peer string, amount int64)
 
 type Receipt struct {
 	ID        string `json:"id"`
@@ -215,7 +215,7 @@ type Module interface {
 
 	// Reserved reports how much capacity this module has locked on a link.
 	// Core sums this across all modules to compute available bandwidth.
-	Reserved(peer string, side int) uint64
+	Reserved(peer string, side int) int64
 
 	// Status returns module-specific status (merged into the node status response).
 	Status() json.RawMessage

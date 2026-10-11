@@ -79,13 +79,13 @@ func (a *App) novLinkCount(peer string) int {
 	c := 0; for _, n := range a.Novations { if n.InPeer == peer || n.OutPeer == peer { c++ } }; return c
 }
 
-func (a *App) Reserved(peer string, side int) uint64 {
+func (a *App) Reserved(peer string, side int) int64 {
 	var t uint64
 	for _, n := range a.Novations {
 		if side == core.IN && n.InPeer == peer { t += n.Amount }
 		if side == core.OUT && n.OutPeer == peer { t += n.Amount }
 	}
-	return t
+	return int64(t)
 }
 
 func (a *App) Status() json.RawMessage {
@@ -148,7 +148,7 @@ func (a *App) reqCommit(peer string, ls *core.Link, raw json.RawMessage) (bool, 
 		a.kicks = append(a.kicks, m.Creditor); return true, nil
 	case m.Creditor:
 		if peer != m.Debtor { return false, nil }
-		if a.bwFn(peer, core.IN) < m.Amount { return false, nil }
+		if a.bwFn(peer, core.IN) < int64(m.Amount) { return false, nil }
 		il := a.links[m.Intermediary]; if il == nil { return false, nil }
 		if a.pbFn(m.Intermediary, core.OUT) < int64(m.Amount) { return false, nil }
 		if a.Novations[m.NovationID] != nil { return false, nil }
