@@ -21,7 +21,7 @@ import (
 
 const (
 	TickRate        = 1000
-	MaxPerLink      = 3
+	MaxPerLink      = 16
 	MaxDepth        = 4
 	CleanupTimeout  = 60 * time.Second
 	CancelTimeout   = 300 // seconds

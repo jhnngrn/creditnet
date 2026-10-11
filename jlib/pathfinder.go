@@ -61,6 +61,7 @@ type PendingReq struct {
 	Penalty   uint64 `json:"penalty"`
 	Direction uint8  `json:"direction"`
 	ExpiresAt int64  `json:"expires_at"`
+	Preimage  []byte `json:"preimage,omitempty"`
 }
 
 type SearchMsg struct {
@@ -122,7 +123,7 @@ func (e *Engine) AcceptPayment(tempID string, send core.SendFunc) (string, error
 
 	p := &Path{Amount: pr.Amount, Fee: pr.Fee, Penalty: pr.Penalty, Preimage: sellerPre, Counterpart: pr.Peer, Direction: 1}
 	e.Paths[pid] = p
-	e.schedulePathExpiry(pid, EndpointPathTTL)
+	e.schedulePathExpiry(pid, RequestTTL)
 
 	send(pr.Peer, "payment_accept", core.Enc(map[string]any{
 		"temp_id": tempID, "cancel_preimage": hex.EncodeToString(cancelPre),
@@ -164,13 +165,25 @@ func (e *Engine) MsgPaymentAccept(sender string, raw json.RawMessage) {
 	h := sha256.Sum256(pre)
 	pid := hex.EncodeToString(h[:])
 
-	p := &Path{Amount: pr.Amount, Fee: pr.Fee, Penalty: pr.Penalty, Preimage: pre, Counterpart: sender, Direction: 0}
+	pr.Preimage = pre
+	e.PendingReqs[pid] = pr
+	e.scheduleFn(time.Duration(RequestTTL)*time.Second, func() { delete(e.PendingReqs, pid) })
+}
+
+func (e *Engine) StartPayment(pid string) error {
+	pr := e.PendingReqs[pid]
+	if pr == nil || pr.Direction != 0 || pr.Preimage == nil {
+		return fmt.Errorf("no invoice for payment %s", pid)
+	}
+	delete(e.PendingReqs, pid)
+
+	p := &Path{Amount: pr.Amount, Fee: pr.Fee, Penalty: pr.Penalty, Preimage: pr.Preimage, Counterpart: pr.Peer, Direction: 0}
 	e.Paths[pid] = p
 	e.schedulePathExpiry(pid, EndpointPathTTL)
 
-	// Buyer starts first search round.
 	if e.GasPerRound != nil { p.Gas += e.GasPerRound(0) }
 	e.doSearch(pid, p, p.Direction)
+	return nil
 }
 
 // ---------------------------------------------------------------------------

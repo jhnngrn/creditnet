@@ -429,19 +429,19 @@ async function refreshPayRequests() {
   try {
     const rp = await api('/api/account','ripple.pending_requests');
     if (rp) for (const [id, r] of Object.entries(rp)) {
-      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, proto: 'ripple'});
+      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, preimage: r.preimage, proto: 'ripple'});
     }
   } catch(e) {}
   try {
     const rs = await api('/api/account','resilience.pending_requests');
     if (rs) for (const [id, r] of Object.entries(rs)) {
-      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, proto: 'resilience'});
+      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, preimage: r.preimage, proto: 'resilience'});
     }
   } catch(e) {}
   try {
     const cc = await api('/api/account','hierarchy.pending_requests');
     if (cc) for (const [id, r] of Object.entries(cc)) {
-      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, proto: 'hierarchy'});
+      items.push({id, peer: r.peer, amount: r.amount, dir: r.direction, exp: r.expires_at, preimage: r.preimage, proto: 'hierarchy'});
     }
   } catch(e) {}
   if (!items.length) { sec.style.display='none'; return; }
@@ -451,9 +451,13 @@ async function refreshPayRequests() {
     const remaining = r.exp ? Math.max(0, r.exp - now) : 0;
     const mins = Math.ceil(remaining / 60);
     const expStr = remaining > 0 ? '<span style="color:var(--fg2);margin-left:8px;font-size:12px">'+mins+' min</span>' : '';
-    if (r.dir === 0) {
+    if (r.dir === 0 && !r.preimage) {
       return '<div class="pending-item"><span><span class="tag" style="margin-right:6px">'+r.proto+'</span>'+toDisplay(r.amount)+' → '+esc(r.peer)+expStr+'</span>'
         + '<span style="color:var(--fg2);font-size:13px">Waiting</span></div>';
+    }
+    if (r.dir === 0 && r.preimage) {
+      return '<div class="pending-item"><span><span class="tag" style="margin-right:6px">'+r.proto+'</span>'+toDisplay(r.amount)+' → '+esc(r.peer)+expStr+'</span>'
+        + '<button class="btn btn-sm btn-primary" onclick="startPayment(\''+r.proto+'\',\''+esc(r.id)+'\')">Start</button></div>';
     }
     return '<div class="pending-item"><span><span class="tag" style="margin-right:6px">'+r.proto+'</span>'+esc(r.peer)+' → '+toDisplay(r.amount)+expStr+'</span>'
       + '<button class="btn btn-sm btn-primary" onclick="acceptPayment(\''+r.proto+'\',\''+esc(r.id)+'\')">Accept</button></div>';
@@ -464,6 +468,13 @@ async function acceptPayment(proto, id) {
   try {
     await api('/api/account', proto+'.accept_payment', {id: id});
     toast('Payment accepted'); refresh();
+  } catch(e) { toast(e.message); }
+}
+
+async function startPayment(proto, id) {
+  try {
+    await api('/api/account', proto+'.start_payment', {id: id});
+    toast('Payment started'); refresh();
   } catch(e) { toast(e.message); }
 }
 

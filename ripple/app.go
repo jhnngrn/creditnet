@@ -70,7 +70,7 @@ func Config() core.ModuleConfig {
 		SyncMethods:    jlib.SyncMethods(),
 		MsgMethods:     jlib.MsgMethods(),
 		OpenMsgMethods: jlib.OpenMsgMethods(),
-		AccountMethods: []string{"send_payment", "accept_payment", "pending_requests", "set_fee_rate", "status"},
+		AccountMethods: []string{"send_payment", "accept_payment", "start_payment", "pending_requests", "set_fee_rate", "status"},
 	}
 }
 
@@ -169,6 +169,11 @@ func (a *App) HandleAccountRequest(method string, payload json.RawMessage, ops c
 		pid, err := a.Engine.AcceptPayment(m.ID, a.sendFn)
 		if err != nil { return nil, err }
 		return core.Enc(map[string]string{"payment_id": pid}), nil
+	case "start_payment":
+		var m struct{ ID string `json:"id"` }
+		if json.Unmarshal(payload, &m) != nil { return nil, fmt.Errorf("bad payload") }
+		if err := a.Engine.StartPayment(m.ID); err != nil { return nil, err }
+		return core.Enc("ok"), nil
 	case "pending_requests":
 		return core.Enc(a.Engine.PendingReqs), nil
 	case "set_fee_rate":
