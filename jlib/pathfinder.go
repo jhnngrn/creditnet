@@ -499,7 +499,7 @@ func (e *Engine) schedulePathExpiry(id string, ttl int) {
 			if p.Counterpart != "" && e.receiptFn != nil {
 				amt := int64(p.Amount)
 				if p.Direction == 0 { amt = -amt }
-				e.receiptFn(id, p.Counterpart, e.module, amt, false)
+				e.receiptFn(id, p.Counterpart, e.module, amt, false, nil)
 			}
 			delete(e.Paths, id)
 		}

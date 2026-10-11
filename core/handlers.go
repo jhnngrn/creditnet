@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -58,13 +59,15 @@ func (n *node) pbFunc() PendingBalanceFunc         { return n.pendingBalance }
 // Receipts
 // ---------------------------------------------------------------------------
 
-func (n *node) addReceipt(id, peer, module string, amount int64, ok bool) {
+func (n *node) addReceipt(id, peer, module string, amount int64, ok bool, preimage []byte) {
 	if len(n.receipts) >= MaxReceipts {
 		n.receipts = n.receipts[1:]
 	}
-	n.receipts = append(n.receipts, Receipt{
-		ID: id, Peer: peer, Module: module, Amount: amount, Status: ok, Timestamp: time.Now().Unix(),
-	})
+	r := Receipt{ID: id, Peer: peer, Module: module, Amount: amount, Status: ok, Timestamp: time.Now().Unix()}
+	if len(preimage) > 0 {
+		r.Preimage = hex.EncodeToString(preimage)
+	}
+	n.receipts = append(n.receipts, r)
 }
 
 func (n *node) receiptFunc() ReceiptFunc { return n.addReceipt }
@@ -95,7 +98,7 @@ func (n *node) handleCoreSyncRequest(peer string, ls *Link, method string, paylo
 			return false, nil
 		}
 		ls.AddBalance(m.Amount, ts)
-		n.addReceipt("", peer, "", m.Amount, true)
+		n.addReceipt("", peer, "", m.Amount, true, nil)
 		return true, nil
 
 	case "sync_demurrage":
@@ -167,9 +170,9 @@ func (n *node) handleCoreSyncResponse(peer string, ls *Link, method string, payl
 		delete(n.directOutbox, peer)
 		if ok {
 			ls.AddBalance(-m.Amount, ts)
-			n.addReceipt("", peer, "", -m.Amount, true)
+			n.addReceipt("", peer, "", -m.Amount, true, nil)
 		} else {
-			n.addReceipt("", peer, "", -m.Amount, false)
+			n.addReceipt("", peer, "", -m.Amount, false, nil)
 		}
 
 	case "sync_demurrage":

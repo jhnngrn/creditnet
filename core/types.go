@@ -154,7 +154,7 @@ type PendingBalanceFunc func(peer string, side int) int64
 
 
 // ReceiptFunc logs a completed operation. Core owns the receipt buffer.
-type ReceiptFunc func(id, peer, module string, amount int64, ok bool)
+type ReceiptFunc func(id, peer, module string, amount int64, ok bool, preimage []byte)
 
 // TransferFunc buffers a non-receipted balance transfer to a peer. Core accumulates and syncs via transfer.
 type TransferFunc func(peer string, amount int64)
@@ -166,6 +166,7 @@ type Receipt struct {
 	Status    bool   `json:"status"`
 	Timestamp int64  `json:"timestamp"`
 	Module    string `json:"module,omitempty"`
+	Preimage  string `json:"preimage,omitempty"`
 }
 
 const MaxReceipts = 64

@@ -258,7 +258,7 @@ func (e *Engine) ReqFinalize(id, peer string, ls *core.Link, ts int64, sellerPre
 		core.Enqueue(&p.Side[core.IN].Queue, "finalize"); e.kicks = append(e.kicks, p.Side[core.IN].Account)
 	}
 	if p.Counterpart != "" && p.Side[core.IN].Account == "" && e.receiptFn != nil {
-		e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), true)
+		e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), true, p.Preimage)
 	}
 	p.Side[core.OUT].Account = ""
 	if p.Side[core.IN].Account == "" { delete(e.Payments, id) }
@@ -274,7 +274,7 @@ func (e *Engine) RespFinalize(id string, ls *core.Link, ok bool, ts int64) {
 	ls.AddBalance(finalizeAmt(p, ticker, core.IN), ts)
 
 	if p.Counterpart != "" && e.receiptFn != nil {
-		e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), true)
+		e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), true, nil)
 	}
 	p.Side[core.IN].Account = ""
 	if p.Side[core.OUT].Account == "" { delete(e.Payments, id) }
@@ -295,7 +295,7 @@ func (e *Engine) ReqCancel(id, peer string, ls *core.Link, ts int64, cancelPreim
 	if p.Preimage == nil { p.Preimage = cancelPreimage }
 	if p.Side[core.OUT].Account != "" { e.enqueue(id, core.OUT, "cancel") }
 	if p.Counterpart != "" && p.Side[core.OUT].Account == "" && e.receiptFn != nil {
-		e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), false)
+		e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), false, nil)
 	}
 	p.Side[core.IN].Account = ""
 	if p.Side[core.OUT].Account == "" { delete(e.Payments, id) }
@@ -308,7 +308,7 @@ func (e *Engine) RespCancel(id string, ls *core.Link, ok bool, ts int64) {
 	core.Dequeue(&p.Side[core.OUT].Queue)
 	ls.AddBalance(cancelAmt(p, ts, core.OUT), ts)
 	if p.Counterpart != "" && p.Side[core.IN].Account == "" && e.receiptFn != nil {
-		e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false)
+		e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false, nil)
 	}
 	p.Side[core.OUT].Account = ""
 	if p.Side[core.IN].Account == "" { delete(e.Payments, id) }
@@ -339,9 +339,9 @@ func (e *Engine) ReqCleanup(id, peer string, ls *core.Link, ts int64) (bool, err
 
 	if p.Counterpart != "" && e.receiptFn != nil {
 		if side == core.IN && p.Side[core.OUT].Account == "" {
-			e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), false)
+			e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), false, nil)
 		} else if side == core.OUT && p.Side[core.IN].Account == "" {
-			e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false)
+			e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false, nil)
 		}
 	}
 	if p.Side[0].Account == "" && p.Side[1].Account == "" { delete(e.Payments, id) }
@@ -371,7 +371,7 @@ func (e *Engine) RespCleanup(id, peer string, ls *core.Link, ok bool, ts int64) 
 		}
 	}
 	if p.Counterpart != "" && p.Side[0].Account == "" && p.Side[1].Account == "" && e.receiptFn != nil {
-		e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false)
+		e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false, nil)
 	}
 	if p.Side[0].Account == "" && p.Side[1].Account == "" { delete(e.Payments, id) }
 }
@@ -389,7 +389,7 @@ func (e *Engine) ReqRollback(id, peer string) (bool, error) {
 		core.Enqueue(&p.Side[core.IN].Queue, "rollback"); e.kicks = append(e.kicks, p.Side[core.IN].Account)
 	} else {
 		if p.Counterpart != "" && e.receiptFn != nil {
-			e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), false)
+			e.receiptFn(id, p.Counterpart, e.module, int64(p.Amount), false, nil)
 		}
 		delete(e.Payments, id)
 	}
@@ -403,7 +403,7 @@ func (e *Engine) RespRollback(id string, ok bool) {
 	p.Side[core.IN].Account = ""
 	if p.Side[core.OUT].Account == "" {
 		if p.Counterpart != "" && e.receiptFn != nil {
-			e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false)
+			e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false, nil)
 		}
 		delete(e.Payments, id)
 	}

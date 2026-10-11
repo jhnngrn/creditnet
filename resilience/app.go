@@ -317,7 +317,7 @@ func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload j
 		if total > 0 { rate = float64(m.Tax) / float64(total) }
 		a.updateWidth(peer, ls.Balance-balBefore, rate)
 		if m.Tax > 0 { a.redistribute(peer, m.Tax, rate) }
-		if a.receiptFn != nil { a.receiptFn("", peer, a.Engine.Module(), int64(m.Amount), true) }
+		if a.receiptFn != nil { a.receiptFn("", peer, a.Engine.Module(), int64(m.Amount), true, nil) }
 		return true, nil
 	case "redistribution":
 		var m struct{ Amount uint64 `json:"amount"` }
@@ -391,7 +391,7 @@ func (a *App) HandleResponse(peer string, ls *core.Link, item core.QueuedMsg, ok
 			a.updateWidth(peer, -total, rate)
 		}
 		if a.receiptFn != nil {
-			a.receiptFn("", peer, a.Engine.Module(), -int64(m.Amount), ok)
+			a.receiptFn("", peer, a.Engine.Module(), -int64(m.Amount), ok, nil)
 		}
 	case "redistribution":
 		var m struct{ Amount uint64 `json:"amount"` }
