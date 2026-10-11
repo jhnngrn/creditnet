@@ -314,7 +314,7 @@ function renderLinks() {
       + '<div class="link-top"><span class="link-peer">'+ep+(isParent?' <span class="tag">parent</span>':'')+'</span><span class="link-balance '+cls+'">'+bal+'</span></div>'
       + '<div class="link-limits"><span>credit out <strong>'+toDisplay(l.credit_limit||0)+'</strong></span><span>credit in <strong>'+toDisplay(l.credit_limit_in||0)+'</strong></span></div>'
       + '<div class="link-controls">'
-      + '<input id="lim-'+ep+'" type="text" inputmode="decimal" placeholder="'+toDisplay(l.credit_limit||0)+'" oninput="limitDec(this)" onkeydown="if(event.key===\'Enter\')setLimit(\''+ep+'\')">'
+      + '<input id="lim-'+ep+'" type="text" inputmode="decimal" placeholder="limit" oninput="limitDec(this)" onkeydown="if(event.key===\'Enter\')setLimit(\''+ep+'\')">'
       + '<button class="btn btn-sm btn-primary" onclick="setLimit(\''+ep+'\')">Set limit</button>'
       + '<input id="pay-'+ep+'" type="text" inputmode="decimal" placeholder="amount" oninput="limitDec(this)" onkeydown="if(event.key===\'Enter\')doPay(\''+ep+'\')">'
       + (l.modules?.['resilience']===true
