@@ -45,7 +45,7 @@ func (a *App) SetCallbacks(module string, send core.SendFunc, deferSend core.Def
 	a.Engine.MaxDepth = MaxDepth
 	a.Engine.TransferFn = transfer
 	a.Engine.ParentFn = func() string { return a.Parent }
-	a.Engine.GasPerRound = func(depth uint8) uint64 { return GasPerHop }
+	a.Engine.GasPerRound = func(depth uint8) uint64 { return GasPerHop * uint64(depth+1) }
 }
 
 func (a *App) DrainKicks() []string { return a.Engine.DrainKicks() }
