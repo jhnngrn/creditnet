@@ -78,7 +78,7 @@ func (s *Server) handleTx(w http.ResponseWriter, r *http.Request) {
 	link.Sync.Counter++; link.Sync.ReqTimestamp = ts
 	var deferredMsgs []Msg
 	if ok { kicks = append(kicks, n.drainAllKicks()...); deferredMsgs = n.drainDeferredMsgs() }
-	if collision { link.Sync.Pending = nil }
+	link.Sync.Pending = nil
 
 	resp := SyncResponse{Counter: env.Counter, OK: ok, Timestamp: ts}
 	link.Sync.CachedResponse = &resp
@@ -92,28 +92,30 @@ func (s *Server) handleTx(w http.ResponseWriter, r *http.Request) {
 func (n *node) sendPending(peer string) {
 	n.mu.Lock()
 	link := n.links[peer]
-	if link == nil || n.inFlight[peer] { n.mu.Unlock(); return }
+	if link == nil { n.mu.Unlock(); return }
+	if s := n.sends[peer]; s != nil && s.counter == link.Sync.Counter && (s.inFlight || s.refractory) { n.mu.Unlock(); return }
 	promoted := false
 	if link.Sync.Pending == nil {
 		msg := n.nextTx(peer); if msg == nil { n.mu.Unlock(); return }
 		link.Sync.Pending = msg; promoted = true
 	}
-	n.inFlight[peer] = true
-	msg := link.Sync.Pending; counter := link.Sync.Counter
+	counter := link.Sync.Counter
+	n.sends[peer] = &peerSend{counter: counter, inFlight: true}
+	msg := link.Sync.Pending
 	env := SyncRequest{From: n.id, To: peer, Counter: counter, Method: msg.Method, Payload: msg.Payload, Timestamp: NowSecs()}
 	if cr := link.Sync.CachedResponse; cr != nil { env.Resp = cr }
-	if promoted { if err := n.commitLocked(); err != nil { delete(n.inFlight, peer); n.mu.Unlock(); return } }
+	if promoted { if err := n.commitLocked(); err != nil { delete(n.sends, peer); n.mu.Unlock(); return } }
 	n.mu.Unlock()
 
 	status, body, err := n.srv.postSigned(PeerDomain(peer), "/p2p/tx", env)
 
 	n.mu.Lock()
-	delete(n.inFlight, peer)
 	if err != nil || status != http.StatusOK {
 		if status == http.StatusBadRequest { log.Printf("[creditnet] %s→%s %s: 400", n.id, peer, msg.Method) }
-		link = n.links[peer]; requeue := status == http.StatusConflict && link != nil && link.Sync.Pending == nil
-		n.mu.Unlock(); if requeue { n.kick(peer) }; return
+		n.setRetry(peer, counter)
+		n.mu.Unlock(); return
 	}
+	delete(n.sends, peer)
 	var resp SyncResponse
 	if json.Unmarshal(body, &resp) != nil { n.mu.Unlock(); return }
 	link = n.links[peer]
@@ -134,4 +136,18 @@ func (n *node) sendPending(peer string) {
 	for _, m := range deferredMsgs { n.srv.sendMessage(n.id, m.To, m.Method, m.Payload) }
 	n.mu.Unlock()
 	for _, p := range kicks { n.kick(p) }
+}
+
+// setRetry sets a refractory timer after a failed send. Caller must hold mu.
+func (n *node) setRetry(peer string, counter uint64) {
+	if s := n.sends[peer]; s != nil && s.timer != nil { s.timer.Stop() }
+	n.sends[peer] = &peerSend{
+		counter: counter, refractory: true,
+		timer: time.AfterFunc(retryDelay, func() {
+			n.mu.Lock()
+			if s := n.sends[peer]; s != nil && s.counter == counter { delete(n.sends, peer) }
+			n.mu.Unlock()
+			n.sendPending(peer)
+		}),
+	}
 }

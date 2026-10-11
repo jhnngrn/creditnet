@@ -221,7 +221,11 @@ func (s *Server) retryPending() {
 	for _, n := range nodes {
 		n.mu.Lock()
 		var kicks []string
-		for peer, l := range n.links { if l.Sync.Pending != nil && !n.inFlight[peer] { kicks = append(kicks, peer) } }
+		for peer, l := range n.links {
+				if l.Sync.Pending == nil { continue }
+				if s := n.sends[peer]; s != nil && s.counter == l.Sync.Counter && (s.inFlight || s.refractory) { continue }
+				kicks = append(kicks, peer)
+			}
 		n.mu.Unlock()
 		for _, p := range kicks { n.kick(p) }
 	}
@@ -231,13 +235,23 @@ func (s *Server) retryPending() {
 // node — owns Links, limitOutbox, linkRequests; modules plug in
 // ---------------------------------------------------------------------------
 
+const retryDelay = 5 * time.Second
+
+// peerSend tracks the outgoing send lifecycle for a peer at a given counter.
+type peerSend struct {
+	counter    uint64
+	inFlight   bool
+	timer      *time.Timer
+	refractory bool
+}
+
 type node struct {
 	srv      *Server
 	mu       sync.Mutex
 	id       string
 	links    map[string]*Link
 	modules  []Module
-	inFlight map[string]bool
+	sends map[string]*peerSend
 
 	// Core-owned state (shared concerns, not duplicated in modules).
 	limitOutbox     map[string]uint64
@@ -264,7 +278,7 @@ func (s *Server) makeNode(id string, raw json.RawMessage) *node {
 	if st.Mods == nil { st.Mods = map[string]json.RawMessage{} }
 	n := &node{
 		srv: s, id: id, links: st.Links, receipts: st.Receipts,
-		modules: make([]Module, len(s.regs)), inFlight: map[string]bool{},
+		modules: make([]Module, len(s.regs)), sends: map[string]*peerSend{},
 		limitOutbox: map[string]uint64{}, directOutbox: map[string]uint64{}, demurrageOutbox: map[string]uint64{}, transferOutbox: map[string]uint64{}, moduleOutbox: map[string]map[string]bool{}, linkRequests: map[string]int64{},
 	}
 	// Migrate links with nil Modules (pre-bilateral-activation data).
@@ -346,7 +360,9 @@ func (n *node) accountOps() AccountOps {
 			peer = strings.ToLower(peer)
 			if n.links[peer] == nil { return fmt.Errorf("no link to %s", peer) }
 			for _, mod := range n.modules { mod.OnRemoveLink(peer) }
-			delete(n.links, peer); delete(n.limitOutbox, peer); delete(n.directOutbox, peer); delete(n.demurrageOutbox, peer); delete(n.transferOutbox, peer); delete(n.moduleOutbox, peer)
+			if s := n.sends[peer]; s != nil && s.timer != nil { s.timer.Stop() }
+				delete(n.sends, peer)
+				delete(n.links, peer); delete(n.limitOutbox, peer); delete(n.directOutbox, peer); delete(n.demurrageOutbox, peer); delete(n.transferOutbox, peer); delete(n.moduleOutbox, peer)
 			return nil
 		},
 	}
