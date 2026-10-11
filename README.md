@@ -158,7 +158,7 @@ Ripple and Hierarchy share the same pathfinder. A `Linear` flag selects flood (R
 
 Flood mode: search fans out to all peers, depth_ack gates each round. Climb mode: search goes to parent, root bounces recurse back (bollplank), no depth_ack.
 
-Payment flow: buyer sends `payment_request` → seller accepts, creates hash chain, sends `payment_accept` with `cancel_preimage` → buyer derives ID, starts search → ping-pong alternation → collision/LCA → `found` → `prepare` → `counterpart_commit` → buyer starts 3PC via Settlement.
+Payment flow: buyer sends `payment_request` → seller accepts, creates hash chain, sends `payment_accept` with `cancel_preimage` → buyer receives invoice as pending request (keyed by payment ID) → buyer manually calls `start_payment` to begin search → ping-pong alternation → collision/LCA → `found` → `prepare` → `counterpart_commit` → buyer starts 3PC via Settlement. The manual step lets the buyer verify the invoice out-of-band (e.g. check a seller signature binding payment ID and amount) before committing to the payment. On finalize, the buyer's receipt stores the seller preimage as cryptographic proof of payment.
 
 There is no cheapest-path routing. The buyer proposes a fee rate (per hop) in the search. Each intermediary checks whether the offered fee meets its own minimum (`FeeRate / 2`) and silently drops the search if it doesn't. The path that forms is the first one where every hop found the fee acceptable — not the cheapest possible route.
 
@@ -241,11 +241,11 @@ All endpoints accept JSON `{method, payload}`.
 
 Core: `add_link` (`{peer, credit_limit?, modules?}`), `remove_link`, `set_credit_limit`, `set_demurrage`, `set_modules` (`{peer, modules}`), `payment`, `status`, `pending_links`, `dismiss_link`
 
-Ripple: `ripple.send_payment` (`{recipient, amount}`), `ripple.accept_payment`, `ripple.pending_requests`, `ripple.set_fee_rate` (`{rate}` — promille, default 10 = 1%)
+Ripple: `ripple.send_payment` (`{recipient, amount}`), `ripple.accept_payment`, `ripple.start_payment` (`{id}` — buyer confirms invoice, starts search), `ripple.pending_requests`, `ripple.set_fee_rate` (`{rate}` — promille, default 10 = 1%)
 
-Resilience: `resilience.send_payment`, `resilience.accept_payment`, `resilience.pending_requests`, `resilience.local_payment` (`{peer, amount}`), `resilience.set_fee_rate` (`{rate}`)
+Resilience: `resilience.send_payment`, `resilience.accept_payment`, `resilience.start_payment` (`{id}`), `resilience.pending_requests`, `resilience.local_payment` (`{peer, amount}`), `resilience.set_fee_rate` (`{rate}`)
 
-Hierarchy: `hierarchy.send_payment` (`{target, amount}`), `hierarchy.accept_payment`, `hierarchy.pending_requests`, `hierarchy.set_parent`, `hierarchy.set_fee_rate` (`{rate}`)
+Hierarchy: `hierarchy.send_payment` (`{target, amount}`), `hierarchy.accept_payment`, `hierarchy.start_payment` (`{id}`), `hierarchy.pending_requests`, `hierarchy.set_parent`, `hierarchy.set_fee_rate` (`{rate}`)
 
 **POST /p2p/tx** — bilateral sync. Wire: `ripple.commit`, `resilience.commit`, `resilience.direct_payment`, `resilience.redistribution`, `hierarchy.search`, `triad.commit`, `triad.finalize`, `transfer`, etc.
 
