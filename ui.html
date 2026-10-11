@@ -590,12 +590,12 @@ async function submitResetPw() {
   try { await adminApi('reset_password',{username:user,password:pass}); closeModal(); toast('Password reset'); } catch(e) { mErr(e.message); }
 }
 async function submitAddLink() {
-  const peer=document.getElementById('m-peer').value.trim(), limit=parseInt(document.getElementById('m-limit').value)||0;
+  const peer=document.getElementById('m-peer').value.trim(), limit=toBase(document.getElementById('m-limit').value||'0');
   if (!peer) { mErr('Peer required'); return; }
   const checks=document.querySelectorAll('.m-al-mod');
   const selected=Array.from(checks).filter(c=>c.checked).map(c=>c.value);
   try {
-    const payload={peer, modules:selected}; if (limit>0) payload.credit_limit=toBase(limit);
+    const payload={peer, modules:selected}; if (limit>0) payload.credit_limit=limit;
     await api('/api/account','add_link',payload); closeModal(); toast('Link request sent'); refresh();
   } catch(e) { mErr(e.message); }
 }
