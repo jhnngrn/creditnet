@@ -112,10 +112,9 @@ func (n *node) sendPending(peer string) {
 	n.mu.Lock()
 	if err != nil || status != http.StatusOK {
 		if status == http.StatusBadRequest { log.Printf("[creditnet] %s→%s %s: 400", n.id, peer, msg.Method) }
-		n.setRetry(peer, counter)
+		n.setRetry(peer, counter, true)
 		n.mu.Unlock(); return
 	}
-	delete(n.sends, peer)
 	var resp SyncResponse
 	if json.Unmarshal(body, &resp) != nil { n.mu.Unlock(); return }
 	link = n.links[peer]
@@ -132,17 +131,19 @@ func (n *node) sendPending(peer string) {
 	link.Sync.Counter++; link.Sync.RespTimestamp = resp.Timestamp
 	kicks := n.drainAllKicks(); deferredMsgs := n.drainDeferredMsgs(); link.Sync.Pending = nil
 	if next := n.nextTx(peer); next != nil { link.Sync.Pending = next; kicks = append(kicks, peer) }
+	n.setRetry(peer, counter, false)
 	if err := n.commitLocked(); err != nil { n.mu.Unlock(); return }
 	for _, m := range deferredMsgs { n.srv.sendMessage(n.id, m.To, m.Method, m.Payload) }
 	n.mu.Unlock()
 	for _, p := range kicks { n.kick(p) }
 }
 
-// setRetry sets a refractory timer after a failed send. Caller must hold mu.
-func (n *node) setRetry(peer string, counter uint64) {
+// setRetry sets a per-peer retry timer. Caller must hold mu.
+// refractory=true blocks kicks (error backoff); false allows kicks (success fallback).
+func (n *node) setRetry(peer string, counter uint64, refractory bool) {
 	if s := n.sends[peer]; s != nil && s.timer != nil { s.timer.Stop() }
 	n.sends[peer] = &peerSend{
-		counter: counter, refractory: true,
+		counter: counter, refractory: refractory,
 		timer: time.AfterFunc(retryDelay, func() {
 			n.mu.Lock()
 			if s := n.sends[peer]; s != nil && s.counter == counter { delete(n.sends, peer) }

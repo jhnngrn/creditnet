@@ -24,7 +24,6 @@ type Config struct {
 	DataDir string
 	Store   Store
 
-	RetryInterval time.Duration
 	SessionTTL    time.Duration
 	KeyCacheTTL   time.Duration
 	HTTPTimeout   time.Duration
@@ -41,7 +40,6 @@ func (c *Config) fill() error {
 	if c.Listen == "" {
 		if _, port, err := net.SplitHostPort(c.Domain); err == nil { c.Listen = ":" + port } else { c.Listen = ":8471" }
 	}
-	if c.RetryInterval <= 0 { c.RetryInterval = 60 * time.Second }
 	if c.SessionTTL <= 0 { c.SessionTTL = 24 * time.Hour }
 	if c.KeyCacheTTL <= 0 { c.KeyCacheTTL = time.Hour }
 	if c.HTTPTimeout <= 0 { c.HTTPTimeout = 10 * time.Second }
@@ -163,8 +161,11 @@ func (s *Server) Init() error {
 		if err != nil || domain != s.cfg.Domain { continue }
 		s.nodes[user] = s.makeNode(id, raw)
 	}
-	// Kick peers with pending outbox entries from boot migration.
+	// Kick peers with pending sync or outbox entries on boot.
 	for _, n := range s.nodes {
+		for peer, l := range n.links {
+			if l.Sync.Pending != nil { n.kick(peer) }
+		}
 		for peer := range n.moduleOutbox { n.kick(peer) }
 	}
 	if s.cfg.AdminUser != "" && s.cfg.AdminPass != "" {
@@ -188,7 +189,6 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	hs := &http.Server{Handler: s.mux}
 	tctx, cancel := context.WithCancel(ctx); defer cancel()
-	go s.retryLoop(tctx)
 	done := make(chan struct{})
 	go func() { defer close(done); <-tctx.Done(); sc, c := context.WithTimeout(context.Background(), 3*time.Second); defer c(); hs.Shutdown(sc) }()
 	s.logf("listening on %s as domain %s", ln.Addr(), s.cfg.Domain)
@@ -209,33 +209,11 @@ func (s *Server) nodeByIdentity(id string) *node {
 	return s.getNode(user)
 }
 
-func (s *Server) retryLoop(ctx context.Context) {
-	t := time.NewTicker(s.cfg.RetryInterval); defer t.Stop()
-	for { select { case <-ctx.Done(): return; case <-t.C: s.retryPending() } }
-}
-
-func (s *Server) retryPending() {
-	s.nmu.RLock()
-	nodes := make([]*node, 0, len(s.nodes)); for _, n := range s.nodes { nodes = append(nodes, n) }
-	s.nmu.RUnlock()
-	for _, n := range nodes {
-		n.mu.Lock()
-		var kicks []string
-		for peer, l := range n.links {
-				if l.Sync.Pending == nil { continue }
-				if s := n.sends[peer]; s != nil && s.counter == l.Sync.Counter && (s.inFlight || s.refractory) { continue }
-				kicks = append(kicks, peer)
-			}
-		n.mu.Unlock()
-		for _, p := range kicks { n.kick(p) }
-	}
-}
-
 // ---------------------------------------------------------------------------
 // node — owns Links, limitOutbox, linkRequests; modules plug in
 // ---------------------------------------------------------------------------
 
-const retryDelay = 5 * time.Second
+const retryDelay = 60 * time.Second
 
 // peerSend tracks the outgoing send lifecycle for a peer at a given counter.
 type peerSend struct {
