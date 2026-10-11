@@ -8,6 +8,6 @@ import (
 func main() {
 	srv, err := core.Boot()
 	if err != nil { panic(err) }
-	srv.MustRegister("resilience", resilience.New, resilience.SyncMethods(), resilience.MsgMethods(), resilience.OpenMsgMethods(), resilience.AccountMethods())
+	srv.MustRegister("resilience", resilience.Config())
 	core.RunAndWait(srv)
 }

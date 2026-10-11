@@ -827,6 +827,11 @@ func gasForDepth(depth uint8) uint64 {
 	return g
 }
 
-func SyncMethods() []string    { return []string{"commit", "finalize", "cancel", "rollback", "cleanup"} }
-func MsgMethods() []string     { return []string{"search", "recurse", "found", "prepare"} }
-func AccountMethods() []string { return []string{"status"} }
+func Config() core.ModuleConfig {
+	return core.ModuleConfig{
+		Factory:        New,
+		SyncMethods:    []string{"commit", "finalize", "cancel", "rollback", "cleanup"},
+		MsgMethods:     []string{"search", "recurse", "found", "prepare"},
+		AccountMethods: []string{"status"},
+	}
+}

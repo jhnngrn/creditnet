@@ -227,6 +227,15 @@ type Module interface {
 
 type ModuleFactory func(nodeID string, links map[string]*Link, state json.RawMessage) Module
 
+// ModuleConfig describes how a module integrates with the server.
+type ModuleConfig struct {
+	Factory        ModuleFactory
+	SyncMethods    []string
+	MsgMethods     []string
+	OpenMsgMethods []string
+	AccountMethods []string
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

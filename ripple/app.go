@@ -64,10 +64,15 @@ func (a *App) Status() json.RawMessage {
 	return core.Enc(map[string]any{"payments": len(a.Engine.Payments), "paths": len(a.Engine.Paths), "fee_rate": a.FeeRate})
 }
 
-func SyncMethods() []string     { return jlib.SyncMethods() }
-func MsgMethods() []string      { return jlib.MsgMethods() }
-func OpenMsgMethods() []string  { return jlib.OpenMsgMethods() }
-func AccountMethods() []string  { return []string{"send_payment", "accept_payment", "pending_requests", "set_fee_rate", "status"} }
+func Config() core.ModuleConfig {
+	return core.ModuleConfig{
+		Factory:        New,
+		SyncMethods:    jlib.SyncMethods(),
+		MsgMethods:     jlib.MsgMethods(),
+		OpenMsgMethods: jlib.OpenMsgMethods(),
+		AccountMethods: []string{"send_payment", "accept_payment", "pending_requests", "set_fee_rate", "status"},
+	}
+}
 
 func (a *App) HandleMessage(sender, method string, payload json.RawMessage) bool {
 	switch method {

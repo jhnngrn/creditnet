@@ -223,6 +223,9 @@ func (a *App) tryNovate() {
 	}
 }
 
-func SyncMethods() []string    { return []string{"commit", "finalize", "rollback"} }
-func MsgMethods() []string     { return nil }
-func AccountMethods() []string { return nil }
+func Config() core.ModuleConfig {
+	return core.ModuleConfig{
+		Factory:     New,
+		SyncMethods: []string{"commit", "finalize", "rollback"},
+	}
+}

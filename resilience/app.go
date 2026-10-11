@@ -111,10 +111,15 @@ func (a *App) Status() json.RawMessage {
 	return core.Enc(map[string]any{"payments": len(a.Engine.Payments), "paths": len(a.Engine.Paths), "width": a.Width, "fee_rate": a.FeeRate})
 }
 
-func SyncMethods() []string     { return append(jlib.SyncMethods(), "redistribution", "direct_payment") }
-func MsgMethods() []string      { return jlib.MsgMethods() }
-func OpenMsgMethods() []string  { return jlib.OpenMsgMethods() }
-func AccountMethods() []string  { return []string{"send_payment", "accept_payment", "pending_requests", "local_payment", "set_fee_rate", "status"} }
+func Config() core.ModuleConfig {
+	return core.ModuleConfig{
+		Factory:        New,
+		SyncMethods:    append(jlib.SyncMethods(), "redistribution", "direct_payment"),
+		MsgMethods:     jlib.MsgMethods(),
+		OpenMsgMethods: jlib.OpenMsgMethods(),
+		AccountMethods: []string{"send_payment", "accept_payment", "pending_requests", "local_payment", "set_fee_rate", "status"},
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Width tracking

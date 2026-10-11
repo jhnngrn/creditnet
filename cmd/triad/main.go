@@ -9,6 +9,6 @@ import (
 func main() {
 	srv, err := core.Boot()
 	if err != nil { log.Fatal(err) }
-	srv.MustRegister("triad", triad.New, triad.SyncMethods(), triad.MsgMethods(), nil, triad.AccountMethods())
+	srv.MustRegister("triad", triad.Config())
 	core.RunAndWait(srv)
 }

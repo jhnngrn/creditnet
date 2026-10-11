@@ -112,37 +112,37 @@ func NewServer(cfg Config) (*Server, error) {
 }
 
 // Register adds a module. Methods are prefixed with "name." on the wire.
-// msgMethods require the sender to be a linked peer; openMsgMethods do not.
-func (s *Server) Register(name string, factory ModuleFactory, syncMethods, msgMethods, openMsgMethods, accountMethods []string) error {
+// MsgMethods require the sender to be a linked peer; OpenMsgMethods do not.
+func (s *Server) Register(name string, cfg ModuleConfig) error {
 	idx := len(s.regs)
-	for _, m := range syncMethods {
+	for _, m := range cfg.SyncMethods {
 		wm := name + "." + m
 		if coreSyncMethods[wm] { return fmt.Errorf("module %q: sync method %q is owned by core", name, m) }
 		if _, ok := s.syncRoute[wm]; ok { return fmt.Errorf("module %q: sync method %q already registered", name, m) }
 	}
-	allMsg := append(msgMethods, openMsgMethods...)
+	allMsg := append(cfg.MsgMethods, cfg.OpenMsgMethods...)
 	for _, m := range allMsg {
 		wm := name + "." + m
 		if coreMsgMethods[wm] { return fmt.Errorf("module %q: msg method %q is owned by core", name, m) }
 		if _, ok := s.msgRoute[wm]; ok { return fmt.Errorf("module %q: msg method %q already registered", name, m) }
 		if _, ok := s.openMsgRoute[wm]; ok { return fmt.Errorf("module %q: msg method %q already registered", name, m) }
 	}
-	for _, m := range accountMethods {
+	for _, m := range cfg.AccountMethods {
 		wm := name + "." + m
 		if _, ok := s.acctRoute[wm]; ok { return fmt.Errorf("module %q: account method %q already registered", name, m) }
 	}
-	r := registration{name: name, factory: factory, sync: setFrom(syncMethods), msg: setFrom(allMsg), account: setFrom(accountMethods)}
+	r := registration{name: name, factory: cfg.Factory, sync: setFrom(cfg.SyncMethods), msg: setFrom(allMsg), account: setFrom(cfg.AccountMethods)}
 	s.regs = append(s.regs, r)
-	for _, m := range syncMethods { s.syncRoute[name+"."+m] = idx }
-	for _, m := range msgMethods { s.msgRoute[name+"."+m] = idx }
-	for _, m := range openMsgMethods { s.openMsgRoute[name+"."+m] = idx }
-	for _, m := range accountMethods { s.acctRoute[name+"."+m] = idx }
+	for _, m := range cfg.SyncMethods { s.syncRoute[name+"."+m] = idx }
+	for _, m := range cfg.MsgMethods { s.msgRoute[name+"."+m] = idx }
+	for _, m := range cfg.OpenMsgMethods { s.openMsgRoute[name+"."+m] = idx }
+	for _, m := range cfg.AccountMethods { s.acctRoute[name+"."+m] = idx }
 	return nil
 }
 
 // MustRegister calls Register and panics on error.
-func (s *Server) MustRegister(name string, factory ModuleFactory, syncMethods, msgMethods, openMsgMethods, accountMethods []string) {
-	if err := s.Register(name, factory, syncMethods, msgMethods, openMsgMethods, accountMethods); err != nil {
+func (s *Server) MustRegister(name string, cfg ModuleConfig) {
+	if err := s.Register(name, cfg); err != nil {
 		panic(err)
 	}
 }
