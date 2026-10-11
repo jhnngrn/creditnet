@@ -121,7 +121,6 @@ func (n *node) accountStatus() json.RawMessage {
 		now := time.Now().Unix()
 		info := map[string]any{
 			"balance": l.EffectiveBalance(now), "credit_limit": l.CreditLimit, "credit_limit_in": l.CreditLimitIn,
-			"bandwidth_in": n.bw(peer, IN), "bandwidth_out": n.bw(peer, OUT),
 			"demurrage": l.Demurrage, "demurrage_in": l.DemurrageIn,
 		}
 		info["modules"] = l.Modules
