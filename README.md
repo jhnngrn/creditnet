@@ -56,25 +56,26 @@ core/                          neutral bilateral substrate
   store.go                       persistence (file-based)
   run.go                         Boot/RunAndWait helpers
 
-jlib/                          Engine: pathfinder + settlement in one struct
-  jlib.go                        Engine struct, constructor, DrainKicks, OnRemoveLink, Reserved
-  pathfinder.go                  search/recurse/found/prepare, flood/climb, ping-pong
-  settlement.go                  3PC: commit/seal/finalize/cancel/cleanup/rollback
+modules/                       plugin modules
+  jlib/                          Engine: pathfinder + settlement in one struct
+    jlib.go                        Engine struct, constructor, DrainKicks, OnRemoveLink, Reserved
+    pathfinder.go                  search/recurse/found/prepare, flood/climb, ping-pong
+    settlement.go                  3PC: commit/seal/finalize/cancel/cleanup/rollback
 
-ripple/                        flood search (imports jlib)
-  app.go
+  ripple/                        flood search (imports jlib)
+    app.go
 
-resilience/                    flood search + fee redistribution (imports jlib)
-  app.go
+  resilience/                    flood search + fee redistribution (imports jlib)
+    app.go
 
-hierarchy/                 climb search (imports jlib)
-  app.go
+  hierarchy/                     climb search (imports jlib)
+    app.go
 
-loops/                         bidirectional flood (standalone 2PC + chunking, imports only core)
-  app.go
+  loops/                         bidirectional flood (standalone 2PC + chunking, imports only core)
+    app.go
 
-triad/                      bilateral 2PC (imports only core)
-  app.go
+  triad/                         bilateral 2PC (imports only core)
+    app.go
 
 cmd/
   base/                          bare barter — core only

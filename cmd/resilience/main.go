@@ -2,7 +2,7 @@ package main
 
 import (
 	"creditnet/core"
-	"creditnet/resilience"
+	"creditnet/modules/resilience"
 )
 
 func main() {

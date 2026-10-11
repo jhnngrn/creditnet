@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"creditnet/core"
-	"creditnet/jlib"
+	"creditnet/modules/jlib"
 )
 
 const (

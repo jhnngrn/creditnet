@@ -2,7 +2,7 @@ package main
 
 import (
 	"creditnet/core"
-	"creditnet/ripple"
+	"creditnet/modules/ripple"
 )
 
 func main() {

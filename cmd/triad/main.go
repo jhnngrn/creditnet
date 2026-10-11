@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"creditnet/core"
-	"creditnet/triad"
+	"creditnet/modules/triad"
 )
 
 func main() {

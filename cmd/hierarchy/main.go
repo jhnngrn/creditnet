@@ -2,7 +2,7 @@ package main
 
 import (
 	"creditnet/core"
-	"creditnet/hierarchy"
+	"creditnet/modules/hierarchy"
 )
 
 func main() {

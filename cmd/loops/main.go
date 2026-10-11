@@ -2,7 +2,7 @@ package main
 
 import (
 	"creditnet/core"
-	"creditnet/loops"
+	"creditnet/modules/loops"
 )
 
 func main() {

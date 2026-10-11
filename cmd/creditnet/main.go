@@ -2,11 +2,11 @@ package main
 
 import (
 	"creditnet/core"
-	"creditnet/hierarchy"
-	"creditnet/loops"
-	"creditnet/resilience"
-	"creditnet/ripple"
-	"creditnet/triad"
+	"creditnet/modules/hierarchy"
+	"creditnet/modules/loops"
+	"creditnet/modules/resilience"
+	"creditnet/modules/ripple"
+	"creditnet/modules/triad"
 )
 
 func main() {
