@@ -61,7 +61,7 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kicks := n.drainAllKicks()
-	if err := n.commitLocked(); err != nil { n.mu.Unlock(); HttpError(w, http.StatusInternalServerError, "persist failed"); return }
+	n.commitLocked()
 	n.mu.Unlock()
 	for _, peer := range kicks { n.kick(peer) }
 	if appErr != nil { ApiError(w, appErr.Error()); return }

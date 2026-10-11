@@ -41,7 +41,7 @@ func (s *Server) handleTx(w http.ResponseWriter, r *http.Request) {
 		link.Sync.Counter++; link.Sync.RespTimestamp = env.Resp.Timestamp
 		piggyKicks := n.drainAllKicks(); piggyMsgs := n.drainDeferredMsgs(); link.Sync.Pending = nil
 		if msg := n.nextTx(env.From); msg != nil { link.Sync.Pending = msg; piggyKicks = append(piggyKicks, env.From) }
-		if err := n.commitLocked(); err != nil { n.mu.Unlock(); HttpError(w, http.StatusInternalServerError, "persist failed"); return }
+		n.commitLocked()
 		for _, m := range piggyMsgs { n.srv.sendMessage(n.id, m.To, m.Method, m.Payload) }
 		for _, p := range piggyKicks { n.kick(p) }
 		collision = false
@@ -82,7 +82,7 @@ func (s *Server) handleTx(w http.ResponseWriter, r *http.Request) {
 
 	resp := SyncResponse{Counter: env.Counter, OK: ok, Timestamp: ts}
 	link.Sync.CachedResponse = &resp
-	if err := n.commitLocked(); err != nil { n.mu.Unlock(); HttpError(w, http.StatusInternalServerError, "persist failed"); return }
+	n.commitLocked()
 	for _, m := range deferredMsgs { n.srv.sendMessage(n.id, m.To, m.Method, m.Payload) }
 	kicks = append(kicks, env.From); n.mu.Unlock()
 	WriteJSON(w, http.StatusOK, resp)
@@ -104,7 +104,7 @@ func (n *node) sendPending(peer string) {
 	msg := link.Sync.Pending
 	env := SyncRequest{From: n.id, To: peer, Counter: counter, Method: msg.Method, Payload: msg.Payload, Timestamp: NowSecs()}
 	if cr := link.Sync.CachedResponse; cr != nil { env.Resp = cr }
-	if promoted { if err := n.commitLocked(); err != nil { delete(n.sends, peer); n.mu.Unlock(); return } }
+	if promoted { n.commitLocked() }
 	n.mu.Unlock()
 
 	status, body, err := n.srv.postSigned(PeerDomain(peer), "/p2p/tx", env)
@@ -132,7 +132,7 @@ func (n *node) sendPending(peer string) {
 	kicks := n.drainAllKicks(); deferredMsgs := n.drainDeferredMsgs(); link.Sync.Pending = nil
 	if next := n.nextTx(peer); next != nil { link.Sync.Pending = next; kicks = append(kicks, peer) }
 	n.setRetry(peer, counter, false)
-	if err := n.commitLocked(); err != nil { n.mu.Unlock(); return }
+	n.commitLocked()
 	for _, m := range deferredMsgs { n.srv.sendMessage(n.id, m.To, m.Method, m.Payload) }
 	n.mu.Unlock()
 	for _, p := range kicks { n.kick(p) }

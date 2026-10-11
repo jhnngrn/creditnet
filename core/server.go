@@ -284,17 +284,12 @@ func (s *Server) makeNode(id string, raw json.RawMessage) *node {
 	return n
 }
 
-func (n *node) commitLocked() error {
+func (n *node) commitLocked() {
 	st := nodeState{ID: n.id, Links: n.links, Receipts: n.receipts, Mods: map[string]json.RawMessage{}}
 	for i, r := range n.srv.regs { data, _ := json.Marshal(n.modules[i]); st.Mods[r.name] = data }
 	if err := n.srv.store.SaveNode(n.id, st); err != nil {
-		if raw, lerr := n.srv.store.LoadNode(n.id); lerr == nil {
-			reloaded := n.srv.makeNode(n.id, raw); n.links = reloaded.links; n.modules = reloaded.modules
-			n.limitOutbox = reloaded.limitOutbox; n.directOutbox = reloaded.directOutbox; n.demurrageOutbox = reloaded.demurrageOutbox; n.transferOutbox = reloaded.transferOutbox; n.moduleOutbox = reloaded.moduleOutbox; n.linkRequests = reloaded.linkRequests; n.receipts = reloaded.receipts
-		}
-		return err
+		log.Fatalf("[creditnet] %s: persist failed: %v", n.id, err)
 	}
-	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +302,7 @@ func (n *node) scheduleFunc() ScheduleFunc {
 	return func(after time.Duration, fn func()) *time.Timer {
 		return time.AfterFunc(after, func() {
 			n.mu.Lock(); fn(); kicks := n.drainAllKicks()
-			if err := n.commitLocked(); err != nil { log.Printf("[creditnet] %s: schedule persist: %v", n.id, err) }
+			n.commitLocked()
 			n.mu.Unlock()
 			for _, p := range kicks { n.kick(p) }
 		})
