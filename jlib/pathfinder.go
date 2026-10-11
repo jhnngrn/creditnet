@@ -403,7 +403,7 @@ func (e *Engine) MsgCounterpartCommit(sender string, raw json.RawMessage) {
 	if p == nil || p.Counterpart != sender || p.Preimage == nil { return }
 	if p.Peer[1] == "" { return }
 
-	e.StartPayment(p)
+	e.BeginSettlement(p)
 	delete(e.Paths, m.ID)
 }
 

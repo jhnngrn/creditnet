@@ -93,10 +93,10 @@ func penaltyDuration(amount uint64) time.Duration {
 }
 
 // ---------------------------------------------------------------------------
-// StartPayment — endpoint initiates settlement from path
+// BeginSettlement — endpoint initiates 3PC settlement from path
 // ---------------------------------------------------------------------------
 
-func (e *Engine) StartPayment(pp *Path) string {
+func (e *Engine) BeginSettlement(pp *Path) string {
 	h := sha256.Sum256(pp.Preimage)
 	id := hex.EncodeToString(h[:])
 	outFee := pp.Fee * e.feeHops(uint64(pp.Hops))
