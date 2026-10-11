@@ -26,10 +26,7 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 			persist = n.modules[idx].HandleMessage(env.From, strings.TrimPrefix(env.Method, s.regs[idx].name+"."), env.Payload)
 		}
 	} else if idx, ok := s.openMsgRoute[env.Method]; ok {
-		link := n.links[env.From]
-		if link == nil || link.ModuleEnabled(s.regs[idx].name) {
-			persist = n.modules[idx].HandleMessage(env.From, strings.TrimPrefix(env.Method, s.regs[idx].name+"."), env.Payload)
-		}
+		persist = n.modules[idx].HandleMessage(env.From, strings.TrimPrefix(env.Method, s.regs[idx].name+"."), env.Payload)
 	}
 	kicks := n.drainAllKicks()
 	if persist { n.commitLocked() }
