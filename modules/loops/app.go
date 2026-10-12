@@ -298,8 +298,8 @@ func (a *App) respCommit(id string, ls *core.Link, ok bool, ts int64) {
 
 func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []byte, final bool) (bool, error) {
 	op := a.Clearings[id]
-	if op == nil { return false, nil }
-	if op.Side[core.IN].Account != peer { return false, nil }
+	if op == nil { return false, fmt.Errorf("unknown clearing %s", id) }
+	if op.Side[core.IN].Account != peer { return false, fmt.Errorf("wrong peer %s", peer) }
 
 	// Verify: hash(preimage) == id.
 	if len(preimage) == 0 || !hashEq(preimage, id) { return false, fmt.Errorf("bad preimage") }
