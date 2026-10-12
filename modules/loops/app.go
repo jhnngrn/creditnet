@@ -247,7 +247,9 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts
 		if op.Side[core.IN].Account != "" { return false, nil }
 		p := a.paths[id]
 		if p != nil { delete(a.paths, id) }
-		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: 0}
+		basePen := op.Amount * PenaltyRate / 1000
+		inPen := op.Side[core.OUT].Penalty + basePen
+		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: inPen}
 		a.scheduleCleanup(id, core.IN)
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
 		a.kicks = append(a.kicks, op.Side[core.OUT].Account)
