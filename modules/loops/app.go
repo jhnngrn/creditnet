@@ -366,7 +366,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	if op.Side[core.IN].Account == "" && op.Side[core.OUT].Account == "" {
 		delete(a.Clearings, id)
 	}
-	return true, nil
+	return !forwardFinal || final, nil // NACK (false) = next commit rejected
 }
 
 func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
@@ -374,24 +374,36 @@ func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
 	if op == nil { return }
 	outPeer := op.Side[core.OUT].Account
 	core.Dequeue(&op.Side[core.OUT].Queue)
+
+	// Always settle — finalize cannot be rejected.
+	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
+	ls.AddBalance(-(op.Amount+penConsumed), ts)
+
 	if ok {
-		penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
-		ls.AddBalance(-(op.Amount+penConsumed), ts)
 		if op.Seed == nil { // intermediary: clear OUT now
 			op.Side[core.OUT].Account = ""
 			if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
 		}
 		// Initiator (Seed != nil): keep OUT.Account for continuation in reqFinalize
-		if outPeer != "" { a.kicks = append(a.kicks, outPeer) }
 	} else {
-		op.Side[core.OUT].Account = ""
-		if op.Side[core.IN].Account != "" {
-			core.Enqueue(&op.Side[core.IN].Queue, "rollback")
-			a.kicks = append(a.kicks, op.Side[core.IN].Account)
-		} else {
-			delete(a.Clearings, id)
+		// NACK on next commit — roll back continuation if created.
+		if op.Preimage != nil {
+			nextID := hex.EncodeToString(op.Preimage)
+			if nextOp := a.Clearings[nextID]; nextOp != nil {
+				nextOp.Side[core.OUT].Account = ""
+				nextOp.Side[core.OUT].Queue = nil
+				if nextOp.Side[core.IN].Account != "" {
+					core.Enqueue(&nextOp.Side[core.IN].Queue, "rollback")
+					a.kicks = append(a.kicks, nextOp.Side[core.IN].Account)
+				} else {
+					delete(a.Clearings, nextID)
+				}
+			}
 		}
+		op.Side[core.OUT].Account = ""
+		if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
 	}
+	if outPeer != "" { a.kicks = append(a.kicks, outPeer) }
 }
 
 func (a *App) scheduleCancel(id string) {
