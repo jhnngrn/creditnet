@@ -226,14 +226,15 @@ func doubleHashEq(pre []byte, id string) bool {
 // 2PC Settlement
 // ---------------------------------------------------------------------------
 
-func (a *App) startClearing(id string, amount, penaltyRate uint64, outPeer string, preimage, cancelPre, seed []byte, step int) {
-	pen := amount * penaltyRate / 1000
+func (a *App) startClearing(id string, amount, penaltyRate uint64, hops uint8, outPeer string, preimage, cancelPre, seed []byte, step int) {
+	basePen := amount * penaltyRate / 1000
+	outPen := basePen * uint64(hops)
 	a.Clearings[id] = &Clearing{
 		ID: id, Amount: amount,
 		Preimage: preimage, CancelPre: cancelPre,
 		Final: step <= 2,
 		Seed: seed, Step: step,
-		Side: [2]ClearingSide{{}, {Account: outPeer, Penalty: pen, Queue: []string{"commit"}}},
+		Side: [2]ClearingSide{{}, {Account: outPeer, Penalty: outPen, Queue: []string{"commit"}}},
 	}
 	a.kicks = append(a.kicks, outPeer)
 }
@@ -244,10 +245,11 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, 
 		if op.Side[core.IN].Account != "" { return false, nil }
 		p := a.paths[id]
 		if p != nil { delete(a.paths, id) }
-		pen := op.Side[core.OUT].Penalty
-		total := op.Amount + pen
+		basePen := op.Amount * PenaltyRate / 1000
+		inPen := op.Side[core.OUT].Penalty + basePen
+		total := op.Amount + inPen
 		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
-		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: pen}
+		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: inPen}
 		a.scheduleCleanup(id, core.IN)
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
 		a.kicks = append(a.kicks, op.Side[core.OUT].Account)
@@ -261,16 +263,18 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, 
 	amount := p.Amount
 	delete(a.paths, id)
 
-	pen := amount * p.Penalty / 1000
-	total := amount + pen
+	basePen := amount * p.Penalty / 1000
+	inPen := basePen * uint64(p.Hops+1)
+	outPen := basePen * uint64(p.Hops)
+	total := amount + inPen
 	if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 
-	op := &Clearing{ID: id, Amount: amount, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: pen}, {}}}
+	op := &Clearing{ID: id, Amount: amount, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: inPen}, {}}}
 	a.Clearings[id] = op
 	a.scheduleCleanup(id, core.IN)
 
 	if outPeer != "" {
-		op.Side[core.OUT] = ClearingSide{Account: outPeer, Penalty: pen, Queue: []string{"commit"}}
+		op.Side[core.OUT] = ClearingSide{Account: outPeer, Penalty: outPen, Queue: []string{"commit"}}
 		a.kicks = append(a.kicks, outPeer)
 	}
 	return true, nil
@@ -696,7 +700,7 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 		step := Nchunks
 		preimage := chainHash(p.Seed, step-1)  // finalize: peel 1
 		cancelPre := chainHash(p.Seed, step-2)  // cancel: peel 2
-		a.startClearing(m.ID, m.Amount, p.Penalty, p.Peer[1], preimage, cancelPre, p.Seed, step)
+		a.startClearing(m.ID, m.Amount, p.Penalty, p.Hops, p.Peer[1], preimage, cancelPre, p.Seed, step)
 		delete(a.paths, m.ID)
 		return
 	}
