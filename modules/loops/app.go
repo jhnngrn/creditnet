@@ -318,7 +318,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				ID: nextID, Amount: op.Amount,
 				Side: [2]ClearingSide{
 					{Account: peer, Time: ts, Penalty: op.Side[core.IN].Penalty},
-					{Account: outPeer, Penalty: op.Side[core.OUT].Penalty},
+					{Account: outPeer, Time: ts, Penalty: op.Side[core.OUT].Penalty},
 				},
 			}
 			// Initiator: copy seed, compute next preimages, queue finalize.
