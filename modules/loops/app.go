@@ -226,8 +226,8 @@ func doubleHashEq(pre []byte, id string) bool {
 // 2PC Settlement
 // ---------------------------------------------------------------------------
 
-func (a *App) startClearing(id string, amount uint64, outPeer string, preimage, cancelPre, seed []byte, step int) {
-	pen := amount * PenaltyRate / 1000
+func (a *App) startClearing(id string, amount, penaltyRate uint64, outPeer string, preimage, cancelPre, seed []byte, step int) {
+	pen := amount * penaltyRate / 1000
 	a.Clearings[id] = &Clearing{
 		ID: id, Amount: amount,
 		Preimage: preimage, CancelPre: cancelPre,
@@ -698,7 +698,7 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 		step := Nchunks
 		preimage := chainHash(p.Seed, step-1)  // finalize: peel 1
 		cancelPre := chainHash(p.Seed, step-2)  // cancel: peel 2
-		a.startClearing(m.ID, m.Amount, p.Peer[1], preimage, cancelPre, p.Seed, step)
+		a.startClearing(m.ID, m.Amount, p.Penalty, p.Peer[1], preimage, cancelPre, p.Seed, step)
 		delete(a.paths, m.ID)
 		return
 	}
@@ -779,10 +779,9 @@ func (a *App) sendSearches() {
 		if avl > 0 && (amount == 0 || uint64(avl) < amount) { amount = uint64(avl) }
 	}
 
-	pen := amount * PenaltyRate / 1000
 	p := &Path{
 		Seed: seed,
-		Amount: amount, Penalty: pen,
+		Amount: amount, Penalty: PenaltyRate,
 		Gas: gasForDepth(0), Depth: 1,
 	}
 	a.paths[searchID] = p
