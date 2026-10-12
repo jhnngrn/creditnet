@@ -538,7 +538,6 @@ func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload j
 	var m struct {
 		ID       string `json:"clearing_id"`
 		Amount   uint64 `json:"amount"`
-		Penalty  uint64 `json:"penalty"`
 		Preimage string `json:"preimage"`
 		Final    bool   `json:"final"`
 	}
