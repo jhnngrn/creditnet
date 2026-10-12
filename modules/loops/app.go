@@ -354,12 +354,19 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	}
 
 	// Forward finalize to OUT (intermediary only; initiator already sent it).
-	op.Side[core.IN].Account = ""
+	op.Preimage = preimage
+	op.Final = forwardFinal
 	if op.Seed == nil && outPeer != "" && len(op.Side[core.OUT].Queue) == 0 {
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
-		op.Preimage = preimage
-		op.Final = forwardFinal
 		a.kicks = append(a.kicks, outPeer)
+		op.Side[core.IN].Account = ""
+	} else if op.Seed == nil && outPeer == "" {
+		// Race: OUT peer not yet known (respFinalize hasn't set it).
+		// Keep IN.Account to prevent deletion; zero Time to block cleanup
+		// on the already-settled side. respFinalize(k) will complete the forward.
+		op.Side[core.IN].Time = 0
+	} else {
+		op.Side[core.IN].Account = ""
 	}
 	if op.Seed != nil { op.Side[core.OUT].Account = "" } // initiator: clear OUT after continuation
 	if op.Side[core.IN].Account == "" && op.Side[core.OUT].Account == "" {
@@ -389,6 +396,12 @@ func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
 						Penalty: op.Side[core.OUT].Penalty,
 					}
 					a.scheduleCleanup(nextID, core.OUT)
+					// Deferred forward: reqFinalize settled IN before OUT was known.
+					if nextOp.Side[core.IN].Account != "" && nextOp.Side[core.IN].Time == 0 {
+						core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
+						a.kicks = append(a.kicks, outPeer)
+						nextOp.Side[core.IN].Account = ""
+					}
 				}
 			}
 		} else if !op.Final {
@@ -584,6 +597,7 @@ func (a *App) scheduleCleanup(id string, side int) {
 	a.scheduleFn(time.Duration(remaining+1)*time.Second, func() {
 		op := a.Clearings[id]
 		if op == nil { return }
+		if op.Side[side].Time == 0 { return } // already settled (race)
 		peer := op.Side[side].Account
 		if peer == "" { return }
 		core.Enqueue(&op.Side[side].Queue, "cleanup")
