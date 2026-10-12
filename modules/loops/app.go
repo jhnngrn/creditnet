@@ -172,7 +172,7 @@ func (a *App) Reserved(peer string, side int) int64 {
 func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
 	switch core.QueueHead(op.Side[side].Queue) {
 	case "commit":
-		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": op.Amount, "penalty": op.PenaltyRate})}
+		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": op.Amount})}
 	case "finalize":
 		m := map[string]any{"clearing_id": id}
 		if op.Preimage != nil { m["preimage"] = hex.EncodeToString(op.Preimage) }
@@ -239,16 +239,15 @@ func (a *App) startClearing(id string, amount uint64, outPeer string, preimage, 
 	a.kicks = append(a.kicks, outPeer)
 }
 
-func (a *App) reqCommit(peer string, ls *core.Link, id string, amount, penalty uint64, ts int64) (bool, error) {
+func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts int64) (bool, error) {
 	if amount == 0 || amount > uint64(math.MaxInt64) { return false, nil }
 
 	// Loop closure: initiator receives commit back.
 	if op := a.Clearings[id]; op != nil {
 		if op.Side[core.IN].Account != "" { return false, nil }
-		// Initiator's IN side: path from search.
 		p := a.paths[id]
 		if p != nil { delete(a.paths, id) }
-		pen := amount * penalty / 1000
+		pen := amount * op.PenaltyRate / 1000
 		total := amount + pen
 		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: pen}
@@ -264,11 +263,11 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount, penalty u
 	outPeer := p.Peer[1]
 	delete(a.paths, id)
 
-	pen := amount * penalty / 1000
+	pen := amount * p.Penalty / 1000
 	total := amount + pen
 	if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 
-	op := &Clearing{ID: id, Amount: amount, PenaltyRate: penalty, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: pen}, {}}}
+	op := &Clearing{ID: id, Amount: amount, PenaltyRate: p.Penalty, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: pen}, {}}}
 	a.Clearings[id] = op
 	a.scheduleCleanup(id, core.IN)
 
@@ -545,7 +544,7 @@ func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload j
 	}
 	if json.Unmarshal(payload, &m) != nil { return false, fmt.Errorf("bad payload") }
 	switch method {
-	case "commit":   return a.reqCommit(peer, ls, m.ID, m.Amount, m.Penalty, ts)
+	case "commit":   return a.reqCommit(peer, ls, m.ID, m.Amount, ts)
 	case "finalize":
 		var pre []byte
 		if m.Preimage != "" { pre, _ = hex.DecodeString(m.Preimage) }
