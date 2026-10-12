@@ -74,14 +74,11 @@ type SearchMsg struct {
 	Hops      uint8  `json:"hops"`
 }
 
-// linkSlots counts operations on a link.
-// reserved=false: all paths + all payments (admission).
-// reserved=true: committed paths + all payments (bandwidth).
-func (e *Engine) linkSlots(peer string, reserved bool) uint8 {
+// linkSlots counts operations on a link (admission).
+func (e *Engine) linkSlots(peer string) uint8 {
 	var n uint8
 	for _, p := range e.Paths {
 		if p.Peer[0] != peer && p.Peer[1] != peer { continue }
-		if reserved && !p.Commit { continue }
 		n++
 	}
 	for _, pay := range e.Payments {
@@ -207,7 +204,7 @@ func (e *Engine) MsgSearch(sender string, raw json.RawMessage) {
 		if e.FeeRate > 0 && !validateRate(m.Fee, m.Amount, e.FeeRate) { return }
 		if e.PenaltyRate > 0 && !validateRate(m.Penalty, m.Amount, e.PenaltyRate) { return }
 		if e.bwFn(sender, int(dir)) < int64(total) { return }
-		if e.linkSlots(sender, false) >= e.MaxPerLink { return }
+		if e.linkSlots(sender) >= e.MaxPerLink { return }
 
 		p = &Path{Amount: m.Amount, Fee: m.Fee, Penalty: m.Penalty, Hops: m.Hops}
 		e.Paths[m.ID] = p
