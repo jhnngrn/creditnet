@@ -612,9 +612,10 @@ func (a *App) msgSearch(sender string, raw json.RawMessage) {
 		}
 		if p.Peer[1-dir] == sender { return }
 		p.Peer[dir] = sender
-		if m.Amount < p.Amount { p.Amount = m.Amount }
+		foundAmount := p.Amount
+		if m.Amount < foundAmount { foundAmount = m.Amount }
 		if p.Peer[0] != "" {
-			a.sendFn(p.Peer[0], "found", core.Enc(map[string]any{"clearing_id": m.ID, "hops": p.Hops}))
+			a.sendFn(p.Peer[0], "found", core.Enc(map[string]any{"clearing_id": m.ID, "hops": p.Hops, "amount": foundAmount}))
 		}
 		return
 	}
@@ -670,21 +671,23 @@ func (a *App) msgRecurse(sender string, raw json.RawMessage) {
 
 func (a *App) msgFound(sender string, raw json.RawMessage) {
 	var m struct {
-		ID   string `json:"clearing_id"`
-		Hops uint8  `json:"hops"`
+		ID     string `json:"clearing_id"`
+		Hops   uint8  `json:"hops"`
+		Amount uint64 `json:"amount"`
 	}
 	if json.Unmarshal(raw, &m) != nil { return }
 	p := a.paths[m.ID]
 	if p == nil { return }
 	p.Peer[1] = sender
 	p.Hops = m.Hops + 1
+	if m.Amount < p.Amount { p.Amount = m.Amount }
 	if p.Seed != nil {
 		if MaxDepth > 0 && p.Hops > MaxDepth*2+1 { return }
 		a.startLoop(m.ID)
 		return
 	}
 	if p.Peer[0] != "" {
-		a.sendFn(p.Peer[0], "found", core.Enc(map[string]any{"clearing_id": m.ID, "hops": p.Hops}))
+		a.sendFn(p.Peer[0], "found", core.Enc(map[string]any{"clearing_id": m.ID, "hops": p.Hops, "amount": p.Amount}))
 	}
 }
 
@@ -719,14 +722,8 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 func (a *App) startLoop(searchID string) {
 	p := a.paths[searchID]
 	if p == nil || p.Peer[1] == "" { return }
-	avl := a.bwFn(p.Peer[1], core.OUT)
-	if avl <= 0 { delete(a.paths, searchID); return }
-	amount := uint64(avl)
-	if p.Amount < amount { amount = p.Amount }
-	if amount > ChunkSize { amount = ChunkSize }
-	if amount == 0 { delete(a.paths, searchID); return }
-	p.Amount = amount
-	a.sendFn(p.Peer[1], "prepare", core.Enc(map[string]any{"clearing_id": searchID, "amount": amount}))
+	if p.Amount == 0 { delete(a.paths, searchID); return }
+	a.sendFn(p.Peer[1], "prepare", core.Enc(map[string]any{"clearing_id": searchID, "amount": p.Amount}))
 }
 
 func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, depth uint8, gas uint64) {
