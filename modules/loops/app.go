@@ -304,6 +304,9 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	// Verify: hash(preimage) == id.
 	if len(preimage) == 0 || !hashEq(preimage, id) { return false, fmt.Errorf("bad preimage") }
 
+	// Check IN side has enough debt for this chunk.
+	if a.pbFn(peer, core.IN) < int64(op.Amount) { return false, nil }
+
 	// Settle IN side: amount + penalty consumed so far.
 	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
 	ls.AddBalance(int64(op.Amount+penConsumed), ts)
@@ -311,10 +314,6 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 
 	// Continuation: create next chunk Clearing before clearing sides.
 	// No commit needed — finalize IS the transition to next chunk.
-	// Check both sides have enough debt for another chunk.
-	if !final && a.pbFn(peer, core.IN) < int64(op.Amount) {
-		final = true
-	}
 	if !final && len(preimage) > 0 && outPeer != "" {
 		nextID := hex.EncodeToString(preimage)
 		if a.Clearings[nextID] == nil {
