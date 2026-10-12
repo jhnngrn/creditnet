@@ -56,8 +56,7 @@ type Path struct {
 	Seed     []byte    // initiator: hash chain seed
 	Depth    uint8    
 	DepthAck [2]bool  
-	Hops     uint8    
-	Commit   bool     
+	Hops     uint8
 }
 
 type ClearingSide struct {
@@ -158,11 +157,6 @@ func (a *App) Reserved(peer string, side int) int64 {
 	var total uint64
 	for _, op := range a.Clearings {
 		if op.Side[side].Account == peer { total += op.Amount + op.Side[side].Penalty }
-	}
-	for _, p := range a.paths {
-		if !p.Commit { continue }
-		if side == core.IN && p.Peer[0] == peer { total += p.Amount }
-		if side == core.OUT && p.Peer[1] == peer { total += p.Amount }
 	}
 	return int64(total)
 }
@@ -580,7 +574,6 @@ func (a *App) HandleMessage(sender, method string, payload json.RawMessage) bool
 	case "search":  a.msgSearch(sender, payload)
 	case "recurse": a.msgRecurse(sender, payload)
 	case "found":   a.msgFound(sender, payload)
-	case "prepare": a.msgPrepare(sender, payload)
 	}
 	return false
 }
@@ -689,27 +682,6 @@ func (a *App) msgFound(sender string, raw json.RawMessage) {
 	}
 }
 
-func (a *App) msgPrepare(sender string, raw json.RawMessage) {
-	var m struct {
-		ID     string `json:"clearing_id"`
-		Amount uint64 `json:"amount"`
-	}
-	if json.Unmarshal(raw, &m) != nil || m.Amount == 0 { return }
-	p := a.paths[m.ID]
-	if p == nil { return }
-
-	if p.Seed != nil {
-		// Initiator: prepare came back. Start 2PC.
-		a.startClearing(m.ID, p)
-		delete(a.paths, m.ID)
-		return
-	}
-
-	if p.Peer[1] == "" { return }
-	p.Commit = true; p.Amount = m.Amount
-	a.sendFn(p.Peer[1], "prepare", core.Enc(map[string]any{"clearing_id": m.ID, "amount": m.Amount}))
-}
-
 // ---------------------------------------------------------------------------
 // Search helpers
 // ---------------------------------------------------------------------------
@@ -718,7 +690,8 @@ func (a *App) startLoop(searchID string) {
 	p := a.paths[searchID]
 	if p == nil || p.Peer[1] == "" { return }
 	if p.Amount == 0 { delete(a.paths, searchID); return }
-	a.sendFn(p.Peer[1], "prepare", core.Enc(map[string]any{"clearing_id": searchID, "amount": p.Amount}))
+	a.startClearing(searchID, p)
+	delete(a.paths, searchID)
 }
 
 func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, depth uint8, gas uint64) {
@@ -821,7 +794,7 @@ func Config() core.ModuleConfig {
 	return core.ModuleConfig{
 		Factory:        New,
 		SyncMethods:    []string{"commit", "finalize", "cancel", "rollback", "cleanup"},
-		MsgMethods:     []string{"search", "recurse", "found", "prepare"},
+		MsgMethods:     []string{"search", "recurse", "found"},
 		AccountMethods: []string{"status"},
 	}
 }
