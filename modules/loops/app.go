@@ -349,7 +349,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				nextChunks := op.Chunks - 1
 				avlOut := a.pbFn(outPeer, core.OUT) + op.Amount + op.Side[core.OUT].Penalty
 				avlIn := a.pbFn(peer, core.IN) + op.Amount + op.Side[core.IN].Penalty
-				isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < op.Amount || avlIn < op.Amount
+				isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < 2*op.Amount || avlIn < 2*op.Amount
 				nextOp := &Clearing{
 					ID: nextID, Amount: op.Amount,
 					Seed: op.Seed, Step: nextStep, Chunks: nextChunks,
@@ -444,7 +444,7 @@ func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
 				inPeer := op.Side[core.IN].Account
 				avlOut := a.pbFn(outPeer, core.OUT) + op.Amount + op.Side[core.OUT].Penalty
 				avlIn := a.pbFn(inPeer, core.IN) + op.Amount + op.Side[core.IN].Penalty
-				isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < op.Amount || avlIn < op.Amount
+				isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < 2*op.Amount || avlIn < 2*op.Amount
 				nextOp := &Clearing{
 					ID: nextID, Amount: op.Amount,
 					Seed: op.Seed, Step: nextStep, Chunks: nextChunks,
