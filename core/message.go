@@ -16,6 +16,7 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 	n := s.nodeByIdentity(env.To)
 	if n == nil { w.WriteHeader(http.StatusOK); return }
 	n.mu.Lock()
+	defer n.mu.Unlock()
 	persist := false
 	// Core-owned messages first.
 	if coreMsgMethods[env.Method] {
@@ -30,7 +31,6 @@ func (s *Server) handleMsg(w http.ResponseWriter, r *http.Request) {
 	}
 	kicks := n.drainAllKicks()
 	if persist { n.commitLocked() }
-	n.mu.Unlock()
 	w.WriteHeader(http.StatusOK)
 	for _, p := range kicks { n.kick(p) }
 }

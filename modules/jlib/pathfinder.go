@@ -331,6 +331,7 @@ func (e *Engine) MsgRecurse(sender string, raw json.RawMessage) {
 		Depth     uint8  `json:"depth"`
 	}
 	if json.Unmarshal(raw, &m) != nil { return }
+	if m.Direction > 1 { return }
 
 	p := e.Paths[m.ID]
 	if p == nil || p.Commit { return }
