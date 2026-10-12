@@ -702,7 +702,6 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 	}
 
 	if p.Peer[1] == "" { return }
-	if m.Amount > ChunkSize { return }
 	p.Commit = true; p.Amount = m.Amount
 	a.sendFn(p.Peer[1], "prepare", core.Enc(map[string]any{"clearing_id": m.ID, "amount": m.Amount}))
 }
