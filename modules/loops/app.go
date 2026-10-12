@@ -680,14 +680,14 @@ func (a *App) msgFound(sender string, raw json.RawMessage) {
 	if p == nil { return }
 	p.Peer[1] = sender
 	p.Hops = m.Hops + 1
-	if m.Amount < p.Amount { p.Amount = m.Amount }
 	if p.Seed != nil {
+		p.Amount = m.Amount
 		if MaxDepth > 0 && p.Hops > MaxDepth*2+1 { return }
 		a.startLoop(m.ID)
 		return
 	}
 	if p.Peer[0] != "" {
-		a.sendFn(p.Peer[0], "found", core.Enc(map[string]any{"clearing_id": m.ID, "hops": p.Hops, "amount": p.Amount}))
+		a.sendFn(p.Peer[0], "found", core.Enc(map[string]any{"clearing_id": m.ID, "hops": p.Hops, "amount": m.Amount}))
 	}
 }
 
