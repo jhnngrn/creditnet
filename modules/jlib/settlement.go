@@ -201,6 +201,9 @@ func (e *Engine) RespCommit(id string, ls *core.Link, ok bool, ts int64) {
 			p.Side[core.OUT].Account = ""
 			core.Enqueue(&p.Side[core.IN].Queue, "rollback"); e.kicks = append(e.kicks, p.Side[core.IN].Account)
 		} else {
+			if p.Counterpart != "" && e.receiptFn != nil {
+				e.receiptFn(id, p.Counterpart, e.module, -int64(p.Amount), false, nil)
+			}
 			delete(e.Payments, id)
 		}
 	}

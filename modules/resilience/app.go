@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"creditnet/core"
@@ -439,6 +440,7 @@ func (a *App) HandleAccountRequest(method string, payload json.RawMessage, ops c
 	case "local_payment":
 		var m struct{ Peer string `json:"peer"`; Amount uint64 `json:"amount"` }
 		if json.Unmarshal(payload, &m) != nil || m.Amount == 0 { return nil, fmt.Errorf("bad payload") }
+		m.Peer = strings.ToLower(m.Peer)
 		if a.links[m.Peer] == nil { return nil, fmt.Errorf("no link to %s", m.Peer) }
 		if _, ok := a.directOutbox[m.Peer]; ok { return nil, fmt.Errorf("already pending") }
 		tax := uint64(float64(m.Amount) * a.taxRate())

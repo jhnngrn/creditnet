@@ -4,6 +4,7 @@ package hierarchy
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"creditnet/core"
 	"creditnet/modules/jlib"
@@ -176,6 +177,7 @@ func (a *App) HandleAccountRequest(method string, payload json.RawMessage, ops c
 	case "set_parent":
 		var m struct{ Peer string `json:"peer"` }
 		if json.Unmarshal(payload, &m) != nil { return nil, fmt.Errorf("bad payload") }
+		m.Peer = strings.ToLower(m.Peer)
 		if m.Peer != "" && a.links[m.Peer] == nil { return nil, fmt.Errorf("no link to %s", m.Peer) }
 		a.Parent = m.Peer
 		return core.Enc(map[string]string{"parent": a.Parent}), nil
