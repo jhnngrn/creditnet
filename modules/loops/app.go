@@ -305,7 +305,8 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	if len(preimage) == 0 || !hashEq(preimage, id) { return false, fmt.Errorf("bad preimage") }
 
 	// Check IN side has enough debt for this chunk.
-	if a.pbFn(peer, core.IN) < op.Amount { return false, nil }
+	// Add back this clearing's own reservation (pbFn already subtracted it).
+	if a.pbFn(peer, core.IN)+op.Amount+op.Side[core.IN].Penalty < op.Amount { return false, nil }
 
 	// Settle IN side: amount + penalty consumed so far.
 	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
