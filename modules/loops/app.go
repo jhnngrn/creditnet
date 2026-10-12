@@ -304,18 +304,23 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	// Verify: hash(preimage) == id.
 	if len(preimage) == 0 || !hashEq(preimage, id) { return false, fmt.Errorf("bad preimage") }
 
-	// Check IN side has enough debt for this chunk.
-	// Add back this clearing's own reservation (pbFn already subtracted it).
-	if a.pbFn(peer, core.IN)+op.Amount+op.Side[core.IN].Penalty < op.Amount { return false, nil }
-
 	// Settle IN side: amount + penalty consumed so far.
 	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
 	ls.AddBalance(op.Amount+penConsumed, ts)
 	outPeer := op.Side[core.OUT].Account
 
+	// Intermediary: check if there's enough IN debt for another chunk.
+	// After settlement, compensate for this clearing's about-to-be-freed reservation.
+	// If not enough, skip continuation and forward final=true.
+	forwardFinal := final
+	if op.Seed == nil && !final {
+		avl := a.pbFn(peer, core.IN) + op.Amount + op.Side[core.IN].Penalty
+		if avl < op.Amount { forwardFinal = true }
+	}
+
 	// Continuation: create next chunk Clearing before clearing sides.
 	// No commit needed — finalize IS the transition to next chunk.
-	if !final && len(preimage) > 0 && outPeer != "" {
+	if !forwardFinal && len(preimage) > 0 && outPeer != "" {
 		nextID := hex.EncodeToString(preimage)
 		if a.Clearings[nextID] == nil {
 			nextOp := &Clearing{
@@ -354,7 +359,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	if op.Seed == nil && outPeer != "" && len(op.Side[core.OUT].Queue) == 0 {
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
 		op.Preimage = preimage
-		op.Final = final
+		op.Final = forwardFinal
 		a.kicks = append(a.kicks, outPeer)
 	}
 	if op.Seed != nil { op.Side[core.OUT].Account = "" } // initiator: clear OUT after continuation
