@@ -13,7 +13,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	"creditnet/core"
@@ -41,8 +40,8 @@ const (
 
 type SearchMsg struct {
 	ID        string `json:"clearing_id"`
-	Amount    uint64 `json:"amount"`
-	Penalty   uint64 `json:"penalty"`
+	Amount    int64  `json:"amount"`
+	Penalty   int64  `json:"penalty"`
 	Depth     uint8  `json:"depth"`
 	Gas       uint64 `json:"gas"`
 	Direction uint8  `json:"direction"`
@@ -51,25 +50,25 @@ type SearchMsg struct {
 
 type Path struct {
 	Peer     [2]string
-	Amount   uint64   
-	Penalty  uint64   
-	Gas      uint64   
+	Amount   int64
+	Penalty  int64
+	Gas      uint64
 	Seed     []byte    // initiator: hash chain seed
-	Depth    uint8    
-	DepthAck [2]bool  
+	Depth    uint8
+	DepthAck [2]bool
 	Hops     uint8
 }
 
 type ClearingSide struct {
 	Account string   `json:"account"`
 	Time    int64    `json:"time"`
-	Penalty uint64   `json:"penalty,omitempty"`
+	Penalty int64    `json:"penalty,omitempty"`
 	Queue   []string `json:"queue,omitempty"`
 }
 
 type Clearing struct {
 	ID          string          `json:"clearing_id"`
-	Amount      uint64          `json:"amount"`
+	Amount      int64           `json:"amount"`
 	Side        [2]ClearingSide `json:"side"`
 	Preimage  []byte         // finalize preimage: hash(pre) == id
 	CancelPre []byte         // cancel preimage: hash(hash(pre)) == id
@@ -156,17 +155,17 @@ func (a *App) NextTx(peer string) *core.QueuedMsg {
 }
 
 func (a *App) Reserved(peer string, side int) int64 {
-	var total uint64
+	var total int64
 	for _, op := range a.Clearings {
 		if op.Side[side].Account == peer { total += op.Amount + op.Side[side].Penalty }
 	}
-	return int64(total)
+	return total
 }
 
 func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
 	switch core.QueueHead(op.Side[side].Queue) {
 	case "commit":
-		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": uint64(ChunkSize)})}
+		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": int64(ChunkSize)})}
 	case "finalize":
 		m := map[string]any{"clearing_id": id}
 		if op.Preimage != nil { m["preimage"] = hex.EncodeToString(op.Preimage) }
@@ -188,10 +187,10 @@ func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
 // Hash chain helpers
 // ---------------------------------------------------------------------------
 
-func penaltyTick(amount, penalty uint64, commitTime, now int64) uint64 {
+func penaltyTick(amount, penalty, commitTime, now int64) int64 {
 	if penalty == 0 || commitTime == 0 { return 0 }
 	elapsed := now - commitTime; if elapsed < 0 { elapsed = 0 }
-	tick := uint64(elapsed+1) * TickRate
+	tick := (elapsed + 1) * int64(TickRate)
 	if tick > amount { tick = amount }
 	return penalty * tick / amount
 }
@@ -227,10 +226,10 @@ func (a *App) startClearing(id string, p *Path) {
 	step := Nchunks
 	preimage := chainHash(p.Seed, step-1)
 	cancelPre := chainHash(p.Seed, step-2)
-	basePen := uint64(ChunkSize) * p.Penalty / 1000
-	outPen := basePen * uint64(p.Hops)
+	basePen := int64(ChunkSize) * p.Penalty / 1000
+	outPen := basePen * int64(p.Hops)
 	a.Clearings[id] = &Clearing{
-		ID: id, Amount: uint64(ChunkSize),
+		ID: id, Amount: int64(ChunkSize),
 		Preimage: preimage, CancelPre: cancelPre,
 		Final: chunks <= 1 || step <= 2,
 		Seed: p.Seed, Step: step, Chunks: chunks,
@@ -239,9 +238,9 @@ func (a *App) startClearing(id string, p *Path) {
 	a.kicks = append(a.kicks, p.Peer[1])
 }
 
-func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts int64) (bool, error) {
-	if amount == 0 || amount > uint64(math.MaxInt64) { return false, fmt.Errorf("bad amount") }
-	if a.pbFn(peer, core.IN) < int64(amount) { return false, nil }
+func (a *App) reqCommit(peer string, ls *core.Link, id string, amount int64, ts int64) (bool, error) {
+	if amount <= 0 { return false, fmt.Errorf("bad amount") }
+	if a.pbFn(peer, core.IN) < amount { return false, nil }
 
 	// Loop closure: initiator receives commit back.
 	if op := a.Clearings[id]; op != nil {
@@ -263,8 +262,8 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts
 	delete(a.paths, id)
 
 	basePen := amount * p.Penalty / 1000
-	inPen := basePen * uint64(p.Hops+1)
-	outPen := basePen * uint64(p.Hops)
+	inPen := basePen * int64(p.Hops+1)
+	outPen := basePen * int64(p.Hops)
 	op := &Clearing{ID: id, Amount: amount, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: inPen}, {}}}
 	a.Clearings[id] = op
 	a.scheduleCleanup(id, core.IN)
@@ -306,11 +305,11 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 	if len(preimage) == 0 || !hashEq(preimage, id) { return false, fmt.Errorf("bad preimage") }
 
 	// Check IN side has enough debt for this chunk.
-	if a.pbFn(peer, core.IN) < int64(op.Amount) { return false, nil }
+	if a.pbFn(peer, core.IN) < op.Amount { return false, nil }
 
 	// Settle IN side: amount + penalty consumed so far.
 	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
-	ls.AddBalance(int64(op.Amount+penConsumed), ts)
+	ls.AddBalance(op.Amount+penConsumed, ts)
 	outPeer := op.Side[core.OUT].Account
 
 	// Continuation: create next chunk Clearing before clearing sides.
@@ -340,7 +339,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				}
 				// Final if no more chunks or not enough debt for another chunk.
 				avl := a.pbFn(outPeer, core.OUT)
-				nextOp.Final = nextChunks <= 1 || nextStep <= 2 || avl < int64(nextOp.Amount)
+				nextOp.Final = nextChunks <= 1 || nextStep <= 2 || avl < nextOp.Amount
 				core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
 				a.kicks = append(a.kicks, outPeer)
 			}
@@ -371,7 +370,7 @@ func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
 	core.Dequeue(&op.Side[core.OUT].Queue)
 	if ok {
 		penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
-		ls.AddBalance(-int64(op.Amount+penConsumed), ts)
+		ls.AddBalance(-(op.Amount+penConsumed), ts)
 		if op.Seed == nil { // intermediary: clear OUT now
 			op.Side[core.OUT].Account = ""
 			if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
@@ -407,7 +406,7 @@ func (a *App) reqRollback(id, peer string, ls *core.Link, ts int64) (bool, error
 	if op.Side[core.OUT].Account != peer { return false, fmt.Errorf("rollback: wrong peer %s", peer) }
 
 	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
-	if penConsumed > 0 { ls.AddBalance(int64(penConsumed), ts) }
+	if penConsumed > 0 { ls.AddBalance(penConsumed, ts) }
 	op.Side[core.OUT].Account = ""
 	if op.Side[core.IN].Account != "" {
 		core.Enqueue(&op.Side[core.IN].Queue, "rollback")
@@ -423,7 +422,7 @@ func (a *App) respRollback(id string, ls *core.Link, ok bool, ts int64) {
 	if op == nil { return }
 	core.Dequeue(&op.Side[core.IN].Queue)
 	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
-	if penConsumed > 0 { ls.AddBalance(-int64(penConsumed), ts) }
+	if penConsumed > 0 { ls.AddBalance(-penConsumed, ts) }
 	op.Side[core.IN].Account = ""
 	if op.Side[core.OUT].Account == "" { delete(a.Clearings, id) }
 }
@@ -437,7 +436,7 @@ func (a *App) reqCancel(id, peer string, ls *core.Link, ts int64, preimage []byt
 	if len(preimage) == 0 || !doubleHashEq(preimage, id) { return false, fmt.Errorf("bad preimage") }
 
 	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
-	if penConsumed > 0 { ls.AddBalance(int64(penConsumed), ts) }
+	if penConsumed > 0 { ls.AddBalance(penConsumed, ts) }
 	op.Side[core.IN].Account = ""
 	if op.Side[core.OUT].Account != "" {
 		core.Enqueue(&op.Side[core.OUT].Queue, "cancel")
@@ -455,7 +454,7 @@ func (a *App) respCancel(id string, ls *core.Link, ok bool, ts int64) {
 	core.Dequeue(&op.Side[core.OUT].Queue)
 	if !ok { return }
 	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
-	if penConsumed > 0 { ls.AddBalance(-int64(penConsumed), ts) }
+	if penConsumed > 0 { ls.AddBalance(-penConsumed, ts) }
 	op.Side[core.OUT].Account = ""
 	if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
 }
@@ -469,9 +468,9 @@ func (a *App) reqCleanup(id, peer string, ls *core.Link, ts int64) (bool, error)
 		if op.Side[s].Account != peer || op.Side[s].Time == 0 { continue }
 		elapsed := ts - op.Side[s].Time
 		if elapsed < 0 { continue }
-		consumed := uint64(elapsed) * TickRate
+		consumed := elapsed * int64(TickRate)
 		if consumed < op.Amount { continue }
-		total := int64(op.Amount + op.Side[s].Penalty)
+		total := op.Amount + op.Side[s].Penalty
 		if s == core.IN { ls.AddBalance(total, ts) } else { ls.AddBalance(-total, ts) }
 		op.Side[s].Account = ""
 		settled = true; side = s
@@ -495,7 +494,7 @@ func (a *App) respCleanup(id, peer string, ls *core.Link, ok bool, ts int64) {
 	if ok {
 		for si := 0; si < 2; si++ {
 			if op.Side[si].Account == peer {
-				total := int64(op.Amount + op.Side[si].Penalty)
+				total := op.Amount + op.Side[si].Penalty
 			if si == core.IN { ls.AddBalance(total, ts) } else { ls.AddBalance(-total, ts) }
 				op.Side[si].Account = ""
 			}
@@ -521,7 +520,7 @@ func (a *App) scheduleCleanup(id string, side int) {
 	t := op.Side[side].Time
 	if t == 0 { return }
 	elapsed := time.Now().Unix() - t
-	remaining := int64(op.Amount/TickRate) - elapsed
+	remaining := op.Amount/TickRate - elapsed
 	if remaining < 0 { remaining = 0 }
 	a.scheduleFn(time.Duration(remaining+1)*time.Second, func() {
 		op := a.Clearings[id]
@@ -540,7 +539,7 @@ func (a *App) scheduleCleanup(id string, side int) {
 func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload json.RawMessage, ts int64) (bool, error) {
 	var m struct {
 		ID       string `json:"clearing_id"`
-		Amount   uint64 `json:"amount"`
+		Amount   int64  `json:"amount"`
 		Preimage string `json:"preimage"`
 		Final    bool   `json:"final"`
 	}
@@ -672,7 +671,7 @@ func (a *App) msgFound(sender string, raw json.RawMessage) {
 	var m struct {
 		ID     string `json:"clearing_id"`
 		Hops   uint8  `json:"hops"`
-		Amount uint64 `json:"amount"`
+		Amount int64  `json:"amount"`
 	}
 	if json.Unmarshal(raw, &m) != nil { return }
 	p := a.paths[m.ID]
@@ -712,7 +711,7 @@ func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, d
 		if dir == 1 { avl = a.pbFn(peer, core.IN) }
 		if avl <= 0 { continue }
 		amount := p.Amount
-		if uint64(avl) < amount { amount = uint64(avl) }
+		if avl < amount { amount = avl }
 		a.sendFn(peer, "search", core.Enc(SearchMsg{
 			ID: searchID, Amount: amount, Penalty: p.Penalty, Depth: depth + 1, Gas: share, Direction: dir, Hops: p.Hops + 1,
 		}))
@@ -746,10 +745,10 @@ func (a *App) sendSearches() {
 	// Search ID = first payment ID = chainHash(seed, Nchunks).
 	searchID := hex.EncodeToString(chainHash(seed, Nchunks))
 
-	var amount uint64
+	var amount int64
 	for _, peer := range debtors {
 		avl := a.pbFn(peer, core.OUT)
-		if avl > 0 && (amount == 0 || uint64(avl) < amount) { amount = uint64(avl) }
+		if avl > 0 && (amount == 0 || avl < amount) { amount = avl }
 	}
 
 	p := &Path{
