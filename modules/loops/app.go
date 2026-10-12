@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"creditnet/core"
@@ -239,7 +240,7 @@ func (a *App) startClearing(id string, p *Path) {
 }
 
 func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts int64) (bool, error) {
-	if amount == 0 { return false, fmt.Errorf("bad amount") }
+	if amount == 0 || amount > uint64(math.MaxInt64) { return false, fmt.Errorf("bad amount") }
 	if a.pbFn(peer, core.IN) < int64(amount) { return false, nil }
 
 	// Loop closure: initiator receives commit back.
