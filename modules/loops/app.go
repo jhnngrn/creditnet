@@ -75,6 +75,7 @@ type Clearing struct {
 	Final     bool           // last chunk — no continuation
 	Seed      []byte         // initiator only
 	Step      int            // initiator only: position in chain
+	Chunks    int            // initiator only: chunks remaining
 }
 
 // ---------------------------------------------------------------------------
@@ -220,16 +221,18 @@ func doubleHashEq(pre []byte, id string) bool {
 // ---------------------------------------------------------------------------
 
 func (a *App) startClearing(id string, p *Path) {
+	chunks := int(p.Amount / ChunkSize)
+	if chunks > Nchunks { chunks = Nchunks }
 	step := Nchunks
 	preimage := chainHash(p.Seed, step-1)
 	cancelPre := chainHash(p.Seed, step-2)
-	basePen := p.Amount * p.Penalty / 1000
+	basePen := uint64(ChunkSize) * p.Penalty / 1000
 	outPen := basePen * uint64(p.Hops)
 	a.Clearings[id] = &Clearing{
-		ID: id, Amount: p.Amount,
+		ID: id, Amount: uint64(ChunkSize),
 		Preimage: preimage, CancelPre: cancelPre,
-		Final: step <= 2,
-		Seed: p.Seed, Step: step,
+		Final: chunks <= 1 || step <= 2,
+		Seed: p.Seed, Step: step, Chunks: chunks,
 		Side: [2]ClearingSide{{}, {Account: p.Peer[1], Penalty: outPen, Queue: []string{"commit"}}},
 	}
 	a.kicks = append(a.kicks, p.Peer[1])
@@ -322,17 +325,19 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 			// Initiator: copy seed, compute next preimages, queue finalize.
 			if op.Seed != nil {
 				nextStep := op.Step - 1
+				nextChunks := op.Chunks - 1
 				nextOp.Seed = op.Seed
 				nextOp.Step = nextStep
+				nextOp.Chunks = nextChunks
 				if nextStep >= 1 {
 					nextOp.Preimage = chainHash(op.Seed, nextStep-1)
 				}
 				if nextStep >= 2 {
 					nextOp.CancelPre = chainHash(op.Seed, nextStep-2)
 				}
-				// Final if chain exhausted or not enough debt for another chunk.
+				// Final if no more chunks or not enough debt for another chunk.
 				avl := a.pbFn(outPeer, core.OUT)
-				nextOp.Final = nextStep <= 2 || avl < int64(nextOp.Amount)
+				nextOp.Final = nextChunks <= 1 || nextStep <= 2 || avl < int64(nextOp.Amount)
 				core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
 				a.kicks = append(a.kicks, outPeer)
 			}
@@ -689,7 +694,7 @@ func (a *App) msgFound(sender string, raw json.RawMessage) {
 func (a *App) startLoop(searchID string) {
 	p := a.paths[searchID]
 	if p == nil || p.Peer[1] == "" { return }
-	if p.Amount == 0 { delete(a.paths, searchID); return }
+	if p.Amount < ChunkSize { delete(a.paths, searchID); return }
 	a.startClearing(searchID, p)
 	delete(a.paths, searchID)
 }
