@@ -506,7 +506,7 @@ func (a *App) scheduleCancel(id string) {
 
 func (a *App) reqRollback(id, peer string, ls *core.Link, ts int64) (bool, error) {
 	op := a.Clearings[id]
-	if op == nil { return false, nil }
+	if op == nil { return false, fmt.Errorf("rollback: unknown payment %s", id) }
 	if op.Side[core.OUT].Account != peer { return false, fmt.Errorf("rollback: wrong peer %s", peer) }
 
 	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
