@@ -606,6 +606,7 @@ func (a *App) msgSearch(sender string, raw json.RawMessage) {
 		}
 		if p.Peer[1-dir] == sender { return }
 		p.Peer[dir] = sender
+		if dir == 1 { p.Hops = m.Hops }
 		foundAmount := p.Amount
 		if m.Amount < foundAmount { foundAmount = m.Amount }
 		if p.Peer[0] != "" {
