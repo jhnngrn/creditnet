@@ -171,7 +171,7 @@ func (a *App) Reserved(peer string, side int) int64 {
 func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
 	switch core.QueueHead(op.Side[side].Queue) {
 	case "commit":
-		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": op.Amount})}
+		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id})}
 	case "finalize":
 		m := map[string]any{"clearing_id": id}
 		if op.Preimage != nil { m["preimage"] = hex.EncodeToString(op.Preimage) }
@@ -238,16 +238,14 @@ func (a *App) startClearing(id string, amount, penaltyRate uint64, outPeer strin
 	a.kicks = append(a.kicks, outPeer)
 }
 
-func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts int64) (bool, error) {
-	if amount == 0 || amount > uint64(math.MaxInt64) { return false, nil }
-
+func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, error) {
 	// Loop closure: initiator receives commit back.
 	if op := a.Clearings[id]; op != nil {
 		if op.Side[core.IN].Account != "" { return false, nil }
 		p := a.paths[id]
 		if p != nil { delete(a.paths, id) }
 		pen := op.Side[core.OUT].Penalty
-		total := amount + pen
+		total := op.Amount + pen
 		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: pen}
 		a.scheduleCleanup(id, core.IN)
@@ -260,6 +258,7 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts
 	p := a.paths[id]
 	if p == nil { return false, nil }
 	outPeer := p.Peer[1]
+	amount := p.Amount
 	delete(a.paths, id)
 
 	pen := amount * p.Penalty / 1000
@@ -536,13 +535,12 @@ func (a *App) scheduleCleanup(id string, side int) {
 func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload json.RawMessage, ts int64) (bool, error) {
 	var m struct {
 		ID       string `json:"clearing_id"`
-		Amount   uint64 `json:"amount"`
 		Preimage string `json:"preimage"`
 		Final    bool   `json:"final"`
 	}
 	if json.Unmarshal(payload, &m) != nil { return false, fmt.Errorf("bad payload") }
 	switch method {
-	case "commit":   return a.reqCommit(peer, ls, m.ID, m.Amount, ts)
+	case "commit":   return a.reqCommit(peer, ls, m.ID, ts)
 	case "finalize":
 		var pre []byte
 		if m.Preimage != "" { pre, _ = hex.DecodeString(m.Preimage) }
