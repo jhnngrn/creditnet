@@ -226,7 +226,10 @@ func doubleHashEq(pre []byte, id string) bool {
 // 2PC Settlement
 // ---------------------------------------------------------------------------
 
-func (a *App) startClearing(id string, p *Path, amount uint64, preimage, cancelPre []byte, step int) {
+func (a *App) startClearing(id string, p *Path, amount uint64) {
+	step := Nchunks
+	preimage := chainHash(p.Seed, step-1)
+	cancelPre := chainHash(p.Seed, step-2)
 	basePen := amount * p.Penalty / 1000
 	outPen := basePen * uint64(p.Hops)
 	a.Clearings[id] = &Clearing{
@@ -697,10 +700,7 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 	if p.Seed != nil {
 		// Initiator: prepare came back. Start 2PC.
 		if m.Amount > ChunkSize { m.Amount = ChunkSize }
-		step := Nchunks
-		preimage := chainHash(p.Seed, step-1)  // finalize: peel 1
-		cancelPre := chainHash(p.Seed, step-2)  // cancel: peel 2
-		a.startClearing(m.ID, p, m.Amount, preimage, cancelPre, step)
+		a.startClearing(m.ID, p, m.Amount)
 		delete(a.paths, m.ID)
 		return
 	}
