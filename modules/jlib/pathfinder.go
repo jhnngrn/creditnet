@@ -74,15 +74,26 @@ type SearchMsg struct {
 	Hops      uint8  `json:"hops"`
 }
 
-// linkSlots counts operations on a link (admission).
+// linkSlots counts committed operations on a link.
 func (e *Engine) linkSlots(peer string) uint8 {
 	var n uint8
 	for _, p := range e.Paths {
+		if !p.Commit { continue }
 		if p.Peer[0] != peer && p.Peer[1] != peer { continue }
 		n++
 	}
 	for _, pay := range e.Payments {
 		if pay.Side[0].Account == peer || pay.Side[1].Account == peer { n++ }
+	}
+	return n
+}
+
+// unresolvedPaths counts paths whose outgoing peer is not yet determined.
+func (e *Engine) unresolvedPaths() uint8 {
+	var n uint8
+	for _, p := range e.Paths {
+		if p.Commit { continue }
+		if p.Peer[0] == "" || p.Peer[1] == "" { n++ }
 	}
 	return n
 }
@@ -204,7 +215,7 @@ func (e *Engine) MsgSearch(sender string, raw json.RawMessage) {
 		if e.FeeRate > 0 && !validateRate(m.Fee, m.Amount, e.FeeRate) { return }
 		if e.PenaltyRate > 0 && !validateRate(m.Penalty, m.Amount, e.PenaltyRate) { return }
 		if e.bwFn(sender, int(dir)) < int64(total) { return }
-		if e.linkSlots(sender) >= e.MaxPerLink { return }
+		if e.unresolvedPaths()+e.linkSlots(sender) >= e.MaxPerLink { return }
 
 		p = &Path{Amount: m.Amount, Fee: m.Fee, Penalty: m.Penalty, Hops: m.Hops}
 		e.Paths[m.ID] = p
