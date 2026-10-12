@@ -250,8 +250,6 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, 
 		if p != nil { delete(a.paths, id) }
 		basePen := op.Amount * PenaltyRate / 1000
 		inPen := op.Side[core.OUT].Penalty + basePen
-		total := op.Amount + inPen
-		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: inPen}
 		a.scheduleCleanup(id, core.IN)
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
@@ -269,9 +267,6 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, 
 	basePen := amount * p.Penalty / 1000
 	inPen := basePen * uint64(p.Hops+1)
 	outPen := basePen * uint64(p.Hops)
-	total := amount + inPen
-	if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
-
 	op := &Clearing{ID: id, Amount: amount, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: inPen}, {}}}
 	a.Clearings[id] = op
 	a.scheduleCleanup(id, core.IN)
@@ -340,8 +335,8 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				if nextStep >= 2 {
 					nextOp.CancelPre = chainHash(op.Seed, nextStep-2)
 				}
-				// Final if chain exhausted or not enough bandwidth for another chunk.
-				avl := a.bwFn(outPeer, core.OUT)
+				// Final if chain exhausted or not enough debt for another chunk.
+				avl := a.pbFn(outPeer, core.OUT)
 				nextOp.Final = nextStep <= 2 || avl < int64(nextOp.Amount)
 				core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
 				a.kicks = append(a.kicks, outPeer)
