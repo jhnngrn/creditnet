@@ -71,7 +71,6 @@ type ClearingSide struct {
 type Clearing struct {
 	ID          string          `json:"clearing_id"`
 	Amount      uint64          `json:"amount"`
-	PenaltyRate uint64          `json:"penalty_rate"`
 	Side        [2]ClearingSide `json:"side"`
 	Preimage  []byte         // finalize preimage: hash(pre) == id
 	CancelPre []byte         // cancel preimage: hash(hash(pre)) == id
@@ -230,7 +229,7 @@ func doubleHashEq(pre []byte, id string) bool {
 func (a *App) startClearing(id string, amount uint64, outPeer string, preimage, cancelPre, seed []byte, step int) {
 	pen := amount * PenaltyRate / 1000
 	a.Clearings[id] = &Clearing{
-		ID: id, Amount: amount, PenaltyRate: PenaltyRate,
+		ID: id, Amount: amount,
 		Preimage: preimage, CancelPre: cancelPre,
 		Final: step <= 2,
 		Seed: seed, Step: step,
@@ -247,7 +246,7 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts
 		if op.Side[core.IN].Account != "" { return false, nil }
 		p := a.paths[id]
 		if p != nil { delete(a.paths, id) }
-		pen := amount * op.PenaltyRate / 1000
+		pen := op.Side[core.OUT].Penalty
 		total := amount + pen
 		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: pen}
@@ -267,7 +266,7 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts
 	total := amount + pen
 	if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 
-	op := &Clearing{ID: id, Amount: amount, PenaltyRate: p.Penalty, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: pen}, {}}}
+	op := &Clearing{ID: id, Amount: amount, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: pen}, {}}}
 	a.Clearings[id] = op
 	a.scheduleCleanup(id, core.IN)
 
@@ -318,7 +317,7 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 		nextID := hex.EncodeToString(preimage)
 		if a.Clearings[nextID] == nil {
 			nextOp := &Clearing{
-				ID: nextID, Amount: op.Amount, PenaltyRate: op.PenaltyRate,
+				ID: nextID, Amount: op.Amount,
 				Side: [2]ClearingSide{
 					{Account: peer, Time: ts, Penalty: op.Side[core.IN].Penalty},
 					{Account: outPeer, Penalty: op.Side[core.OUT].Penalty},
