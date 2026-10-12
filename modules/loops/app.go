@@ -42,21 +42,19 @@ type SearchMsg struct {
 	ID        string `json:"clearing_id"`
 	Amount    int64  `json:"amount"`
 	Penalty   int64  `json:"penalty"`
-	Depth     uint8  `json:"depth"`
 	Gas       uint64 `json:"gas"`
 	Direction uint8  `json:"direction"`
 	Hops      uint8  `json:"hops"`
 }
 
 type Path struct {
-	Peer     [2]string
-	Amount   int64
-	Penalty  int64
-	Gas      uint64
-	Seed     []byte    // initiator: hash chain seed
-	Depth    uint8
-	DepthAck [2]bool
-	Hops     uint8
+	Peer    [2]string
+	Amount  int64
+	Penalty int64
+	Gas     uint64
+	Seed    []byte // initiator: hash chain seed
+	Depth   uint8  // initiator only: current search depth
+	Hops    uint8
 }
 
 type ClearingSide struct {
@@ -683,9 +681,8 @@ func (a *App) HandleResponse(peer string, ls *core.Link, item core.QueuedMsg, ok
 
 func (a *App) HandleMessage(sender, method string, payload json.RawMessage) bool {
 	switch method {
-	case "search":  a.msgSearch(sender, payload)
-	case "recurse": a.msgRecurse(sender, payload)
-	case "found":   a.msgFound(sender, payload)
+	case "search": a.msgSearch(sender, payload)
+	case "found":  a.msgFound(sender, payload)
 	}
 	return false
 }
@@ -708,7 +705,7 @@ func (a *App) msgSearch(sender string, raw json.RawMessage) {
 					if dir == 0 && a.pbFn(peer, core.OUT) > 0 { peers = append(peers, peer) }
 					if dir == 1 && a.pbFn(peer, core.IN) > 0 { peers = append(peers, peer) }
 				}
-				a.floodSearch(m.ID, p, peers, dir, m.Depth, m.Gas)
+				a.floodSearch(m.ID, p, peers, dir, m.Gas)
 			}
 			return
 		}
@@ -724,52 +721,10 @@ func (a *App) msgSearch(sender string, raw json.RawMessage) {
 	}
 
 	if m.Penalty*2 < PenaltyRate { return }
-	p = &Path{Amount: m.Amount, Penalty: m.Penalty, Hops: m.Hops, Depth: 1}
+	p = &Path{Amount: m.Amount, Penalty: m.Penalty, Hops: m.Hops}
 	p.Peer[dir] = sender
 	a.paths[m.ID] = p
 	a.schedulePathExpiry(m.ID)
-	a.sendFn(sender, "recurse", core.Enc(map[string]any{
-		"clearing_id": m.ID, "direction": m.Direction, "depth": uint8(0),
-	}))
-}
-
-func (a *App) msgRecurse(sender string, raw json.RawMessage) {
-	var m struct {
-		ID        string `json:"clearing_id"`
-		Direction uint8  `json:"direction"`
-		Depth     uint8  `json:"depth"`
-	}
-	if json.Unmarshal(raw, &m) != nil { return }
-	p := a.paths[m.ID]
-	if p == nil || (p.Peer[0] != "" && p.Peer[1] != "") { return }
-	if m.Depth+1 != p.Depth { return }
-
-	if p.Seed != nil {
-		if p.DepthAck[m.Direction] { return }
-		p.DepthAck[m.Direction] = true
-		if !p.DepthAck[0] || !p.DepthAck[1] { return }
-		if p.Depth >= MaxDepth { return }
-		p.Gas += gasForDepth(p.Depth)
-		p.Depth++
-		p.DepthAck = [2]bool{}
-		id := m.ID
-		a.scheduleFn(RefractoryDelay, func() {
-			p := a.paths[id]
-			if p == nil || (p.Peer[0] != "" && p.Peer[1] != "") { return }
-			a.floodSearchInitiator(id, p)
-		})
-		return
-	}
-
-	for d := 0; d < 2; d++ {
-		if p.Peer[d] == sender { continue }
-		if p.Peer[d] != "" {
-			a.sendFn(p.Peer[d], "recurse", core.Enc(map[string]any{
-				"clearing_id": m.ID, "direction": m.Direction, "depth": p.Depth,
-			}))
-			return
-		}
-	}
 }
 
 func (a *App) msgFound(sender string, raw json.RawMessage) {
@@ -806,7 +761,7 @@ func (a *App) startLoop(searchID string) {
 	delete(a.paths, searchID)
 }
 
-func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, depth uint8, gas uint64) {
+func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, gas uint64) {
 	if gas == 0 || len(peers) == 0 { return }
 	share := gas / uint64(len(peers))
 	if share < 1 { share = 1 }
@@ -818,7 +773,7 @@ func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, d
 		amount := p.Amount
 		if avl < amount { amount = avl }
 		a.sendFn(peer, "search", core.Enc(SearchMsg{
-			ID: searchID, Amount: amount, Penalty: p.Penalty, Depth: depth + 1, Gas: share, Direction: dir, Hops: p.Hops + 1,
+			ID: searchID, Amount: amount, Penalty: p.Penalty, Gas: share, Direction: dir, Hops: p.Hops + 1,
 		}))
 		a.transferFn(peer, int64(share))
 		gas -= share
@@ -832,8 +787,8 @@ func (a *App) floodSearchInitiator(searchID string, p *Path) {
 		if a.pbFn(peer, core.OUT) > 0 { debtors = append(debtors, peer) }
 		if a.pbFn(peer, core.IN) > 0 { creditors = append(creditors, peer) }
 	}
-	a.floodSearch(searchID, p, debtors, 0, 0, p.Gas)
-	a.floodSearch(searchID, p, creditors, 1, 0, p.Gas)
+	a.floodSearch(searchID, p, debtors, 0, p.Gas)
+	a.floodSearch(searchID, p, creditors, 1, p.Gas)
 }
 
 func (a *App) sendSearches() {
@@ -864,10 +819,23 @@ func (a *App) sendSearches() {
 	a.paths[searchID] = p
 	a.schedulePathExpiry(searchID)
 	a.floodSearchInitiator(searchID, p)
+	a.scheduleDepthIncrease(searchID)
 }
 
 func (a *App) schedulePathExpiry(id string) {
 	a.scheduleFn(time.Duration(PathTTL)*time.Second, func() { delete(a.paths, id) })
+}
+
+func (a *App) scheduleDepthIncrease(id string) {
+	a.scheduleFn(RefractoryDelay, func() {
+		p := a.paths[id]
+		if p == nil || (p.Peer[0] != "" && p.Peer[1] != "") { return }
+		if p.Depth >= MaxDepth { return }
+		p.Gas += gasForDepth(p.Depth)
+		p.Depth++
+		a.floodSearchInitiator(id, p)
+		a.scheduleDepthIncrease(id)
+	})
 }
 
 func (a *App) searchAndReschedule() {
@@ -914,7 +882,7 @@ func Config() core.ModuleConfig {
 	return core.ModuleConfig{
 		Factory:        New,
 		SyncMethods:    []string{"commit", "finalize", "cancel", "rollback", "cleanup"},
-		MsgMethods:     []string{"search", "recurse", "found"},
+		MsgMethods:     []string{"search", "found"},
 		AccountMethods: []string{"status"},
 	}
 }
