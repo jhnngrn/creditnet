@@ -592,7 +592,7 @@ func (a *App) msgSearch(sender string, raw json.RawMessage) {
 				var peers []string
 				for peer := range a.links {
 					if peer == sender { continue }
-					if a.linkSlots(peer) >= MaxPerLink { continue }
+					if a.unresolvedPaths()+a.linkSlots(peer) >= MaxPerLink { continue }
 					if dir == 0 && a.pbFn(peer, core.OUT) > 0 { peers = append(peers, peer) }
 					if dir == 1 && a.pbFn(peer, core.IN) > 0 { peers = append(peers, peer) }
 				}
@@ -716,7 +716,7 @@ func (a *App) floodSearch(searchID string, p *Path, peers []string, dir uint8, d
 func (a *App) floodSearchInitiator(searchID string, p *Path) {
 	var debtors, creditors []string
 	for peer := range a.links {
-		if a.linkSlots(peer) >= MaxPerLink { continue }
+		if a.unresolvedPaths()+a.linkSlots(peer) >= MaxPerLink { continue }
 		if a.pbFn(peer, core.OUT) > 0 { debtors = append(debtors, peer) }
 		if a.pbFn(peer, core.IN) > 0 { creditors = append(creditors, peer) }
 	}
@@ -727,7 +727,7 @@ func (a *App) floodSearchInitiator(searchID string, p *Path) {
 func (a *App) sendSearches() {
 	var debtors, creditors []string
 	for peer := range a.links {
-		if a.linkSlots(peer) >= MaxPerLink { continue }
+		if a.unresolvedPaths()+a.linkSlots(peer) >= MaxPerLink { continue }
 		if a.pbFn(peer, core.OUT) > 0 { debtors = append(debtors, peer) }
 		if a.pbFn(peer, core.IN) > 0 { creditors = append(creditors, peer) }
 	}
@@ -767,6 +767,14 @@ func (a *App) linkSlots(peer string) int {
 	count := 0
 	for _, op := range a.Clearings {
 		if op.Side[core.IN].Account == peer || op.Side[core.OUT].Account == peer { count++ }
+	}
+	return count
+}
+
+func (a *App) unresolvedPaths() int {
+	count := 0
+	for _, p := range a.paths {
+		if p.Peer[0] == "" || p.Peer[1] == "" { count++ }
 	}
 	return count
 }
