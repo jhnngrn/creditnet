@@ -226,17 +226,17 @@ func doubleHashEq(pre []byte, id string) bool {
 // 2PC Settlement
 // ---------------------------------------------------------------------------
 
-func (a *App) startClearing(id string, amount, penaltyRate uint64, hops uint8, outPeer string, preimage, cancelPre, seed []byte, step int) {
-	basePen := amount * penaltyRate / 1000
-	outPen := basePen * uint64(hops)
+func (a *App) startClearing(id string, p *Path, amount uint64, preimage, cancelPre []byte, step int) {
+	basePen := amount * p.Penalty / 1000
+	outPen := basePen * uint64(p.Hops)
 	a.Clearings[id] = &Clearing{
 		ID: id, Amount: amount,
 		Preimage: preimage, CancelPre: cancelPre,
 		Final: step <= 2,
-		Seed: seed, Step: step,
-		Side: [2]ClearingSide{{}, {Account: outPeer, Penalty: outPen, Queue: []string{"commit"}}},
+		Seed: p.Seed, Step: step,
+		Side: [2]ClearingSide{{}, {Account: p.Peer[1], Penalty: outPen, Queue: []string{"commit"}}},
 	}
-	a.kicks = append(a.kicks, outPeer)
+	a.kicks = append(a.kicks, p.Peer[1])
 }
 
 func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, error) {
@@ -700,7 +700,7 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 		step := Nchunks
 		preimage := chainHash(p.Seed, step-1)  // finalize: peel 1
 		cancelPre := chainHash(p.Seed, step-2)  // cancel: peel 2
-		a.startClearing(m.ID, m.Amount, p.Penalty, p.Hops, p.Peer[1], preimage, cancelPre, p.Seed, step)
+		a.startClearing(m.ID, p, m.Amount, preimage, cancelPre, step)
 		delete(a.paths, m.ID)
 		return
 	}
