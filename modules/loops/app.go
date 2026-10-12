@@ -311,6 +311,10 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 
 	// Continuation: create next chunk Clearing before clearing sides.
 	// No commit needed — finalize IS the transition to next chunk.
+	// Check both sides have enough debt for another chunk.
+	if !final && (a.pbFn(peer, core.IN) < int64(op.Amount) || a.pbFn(outPeer, core.OUT) < int64(op.Amount)) {
+		final = true
+	}
 	if !final && len(preimage) > 0 && outPeer != "" {
 		nextID := hex.EncodeToString(preimage)
 		if a.Clearings[nextID] == nil {
