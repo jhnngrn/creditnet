@@ -170,7 +170,7 @@ func (a *App) Reserved(peer string, side int) int64 {
 func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
 	switch core.QueueHead(op.Side[side].Queue) {
 	case "commit":
-		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id})}
+		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": uint64(ChunkSize)})}
 	case "finalize":
 		m := map[string]any{"clearing_id": id}
 		if op.Preimage != nil { m["preimage"] = hex.EncodeToString(op.Preimage) }
@@ -241,7 +241,10 @@ func (a *App) startClearing(id string, p *Path) {
 	a.kicks = append(a.kicks, p.Peer[1])
 }
 
-func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, error) {
+func (a *App) reqCommit(peer string, ls *core.Link, id string, amount uint64, ts int64) (bool, error) {
+	if amount == 0 { return false, fmt.Errorf("bad amount") }
+	if a.pbFn(peer, core.IN) < int64(amount) { return false, nil }
+
 	// Loop closure: initiator receives commit back.
 	if op := a.Clearings[id]; op != nil {
 		if op.Side[core.IN].Account != "" { return false, nil }
@@ -260,7 +263,6 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, ts int64) (bool, 
 	p := a.paths[id]
 	if p == nil { return false, nil }
 	outPeer := p.Peer[1]
-	amount := p.Amount
 	delete(a.paths, id)
 
 	basePen := amount * p.Penalty / 1000
@@ -536,12 +538,13 @@ func (a *App) scheduleCleanup(id string, side int) {
 func (a *App) HandleRequest(peer string, ls *core.Link, method string, payload json.RawMessage, ts int64) (bool, error) {
 	var m struct {
 		ID       string `json:"clearing_id"`
+		Amount   uint64 `json:"amount"`
 		Preimage string `json:"preimage"`
 		Final    bool   `json:"final"`
 	}
 	if json.Unmarshal(payload, &m) != nil { return false, fmt.Errorf("bad payload") }
 	switch method {
-	case "commit":   return a.reqCommit(peer, ls, m.ID, ts)
+	case "commit":   return a.reqCommit(peer, ls, m.ID, m.Amount, ts)
 	case "finalize":
 		var pre []byte
 		if m.Preimage != "" { pre, _ = hex.DecodeString(m.Preimage) }
