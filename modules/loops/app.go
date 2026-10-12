@@ -614,7 +614,7 @@ func (a *App) msgSearch(sender string, raw json.RawMessage) {
 		return
 	}
 
-	if m.Penalty*2000 < m.Amount*PenaltyRate { return }
+	if m.Penalty*2 < PenaltyRate { return }
 	p = &Path{Amount: m.Amount, Penalty: m.Penalty, Hops: m.Hops, Depth: 1}
 	p.Peer[dir] = sender
 	a.paths[m.ID] = p
