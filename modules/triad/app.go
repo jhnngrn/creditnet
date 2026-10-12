@@ -156,7 +156,6 @@ func (a *App) reqCommit(peer string, ls *core.Link, raw json.RawMessage) (bool, 
 		a.Novations[m.NovationID] = &Novation{Amount: m.Amount, Role: "creditor", InPeer: peer, OutPeer: m.Intermediary, Queue: []string{"commit"}}
 		a.kicks = append(a.kicks, m.Intermediary); return true, nil
 	case m.Intermediary:
-		if peer != m.Creditor { return false, nil }
 		nov := a.Novations[m.NovationID]; if nov == nil || nov.Role != "intermediary" { return false, nil }
 		if nov.InPeer != peer { return false, nil }
 		core.Enqueue(&nov.Queue, "finalize"); a.kicks = append(a.kicks, nov.OutPeer); return true, nil
