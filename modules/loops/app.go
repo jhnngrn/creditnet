@@ -226,14 +226,14 @@ func doubleHashEq(pre []byte, id string) bool {
 // 2PC Settlement
 // ---------------------------------------------------------------------------
 
-func (a *App) startClearing(id string, p *Path, amount uint64) {
+func (a *App) startClearing(id string, p *Path) {
 	step := Nchunks
 	preimage := chainHash(p.Seed, step-1)
 	cancelPre := chainHash(p.Seed, step-2)
-	basePen := amount * p.Penalty / 1000
+	basePen := p.Amount * p.Penalty / 1000
 	outPen := basePen * uint64(p.Hops)
 	a.Clearings[id] = &Clearing{
-		ID: id, Amount: amount,
+		ID: id, Amount: p.Amount,
 		Preimage: preimage, CancelPre: cancelPre,
 		Final: step <= 2,
 		Seed: p.Seed, Step: step,
@@ -699,8 +699,7 @@ func (a *App) msgPrepare(sender string, raw json.RawMessage) {
 
 	if p.Seed != nil {
 		// Initiator: prepare came back. Start 2PC.
-		if m.Amount > ChunkSize { m.Amount = ChunkSize }
-		a.startClearing(m.ID, p, m.Amount)
+		a.startClearing(m.ID, p)
 		delete(a.paths, m.ID)
 		return
 	}
@@ -726,6 +725,7 @@ func (a *App) startLoop(searchID string) {
 	if p.Amount < amount { amount = p.Amount }
 	if amount > ChunkSize { amount = ChunkSize }
 	if amount == 0 { delete(a.paths, searchID); return }
+	p.Amount = amount
 	a.sendFn(p.Peer[1], "prepare", core.Enc(map[string]any{"clearing_id": searchID, "amount": amount}))
 }
 
