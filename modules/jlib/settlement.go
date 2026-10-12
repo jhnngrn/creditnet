@@ -253,7 +253,7 @@ func (e *Engine) ReqFinalize(id, peer string, ls *core.Link, ts int64, sellerPre
 	ticker := penaltyElapsed(p.Amount, p.Side[side].CommitTime, ts)
 	ls.AddBalance(finalizeAmt(p, ticker, side), ts)
 
-	if p.Preimage == nil { p.Preimage = sellerPreimage }
+	p.Preimage = sellerPreimage
 	if p.Side[core.IN].Account != "" {
 		core.Enqueue(&p.Side[core.IN].Queue, "finalize"); e.kicks = append(e.kicks, p.Side[core.IN].Account)
 	}
