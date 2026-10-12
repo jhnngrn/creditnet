@@ -163,7 +163,7 @@ func (a *App) Reserved(peer string, side int) int64 {
 func (a *App) buildMsg(id string, op *Clearing, side int) *core.QueuedMsg {
 	switch core.QueueHead(op.Side[side].Queue) {
 	case "commit":
-		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": int64(ChunkSize)})}
+		return &core.QueuedMsg{Method: "commit", Payload: core.Enc(map[string]any{"clearing_id": id, "amount": op.Amount})}
 	case "finalize":
 		m := map[string]any{"clearing_id": id}
 		if op.Preimage != nil { m["preimage"] = hex.EncodeToString(op.Preimage) }
