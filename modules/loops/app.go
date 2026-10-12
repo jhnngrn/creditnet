@@ -230,7 +230,7 @@ func doubleHashEq(pre []byte, id string) bool {
 func (a *App) startClearing(id string, amount uint64, outPeer string, preimage, cancelPre, seed []byte, step int) {
 	pen := amount * PenaltyRate / 1000
 	a.Clearings[id] = &Clearing{
-		ID: id, Amount: amount, PenaltyRate: pen,
+		ID: id, Amount: amount, PenaltyRate: PenaltyRate,
 		Preimage: preimage, CancelPre: cancelPre,
 		Final: step <= 2,
 		Seed: seed, Step: step,
@@ -245,38 +245,35 @@ func (a *App) reqCommit(peer string, ls *core.Link, id string, amount, penalty u
 	// Loop closure: initiator receives commit back.
 	if op := a.Clearings[id]; op != nil {
 		if op.Side[core.IN].Account != "" { return false, nil }
-		// Initiator's IN hops: path from search.
+		// Initiator's IN side: path from search.
 		p := a.paths[id]
-		var hops uint8
-		if p != nil { hops = p.Hops; delete(a.paths, id) }
-		inPen := penalty * uint64(hops+1)
-		total := amount + inPen
+		if p != nil { delete(a.paths, id) }
+		pen := amount * penalty / 1000
+		total := amount + pen
 		if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
-		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: inPen}
+		op.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: pen}
 		a.scheduleCleanup(id, core.IN)
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
 		a.kicks = append(a.kicks, op.Side[core.OUT].Account)
 		return true, nil
 	}
 
-	// Intermediate: read hops from path.
+	// Intermediate: read path.
 	p := a.paths[id]
 	if p == nil { return false, nil }
-	hops := p.Hops
 	outPeer := p.Peer[1]
 	delete(a.paths, id)
 
-	inPen := penalty * uint64(hops+1)
-	total := amount + inPen
+	pen := amount * penalty / 1000
+	total := amount + pen
 	if a.bwFn(peer, core.IN) < int64(total) { return false, nil }
 
-	outPen := penalty * uint64(hops)
-	op := &Clearing{ID: id, Amount: amount, PenaltyRate: penalty, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: inPen}, {}}}
+	op := &Clearing{ID: id, Amount: amount, PenaltyRate: penalty, Side: [2]ClearingSide{{Account: peer, Time: ts, Penalty: pen}, {}}}
 	a.Clearings[id] = op
 	a.scheduleCleanup(id, core.IN)
 
 	if outPeer != "" {
-		op.Side[core.OUT] = ClearingSide{Account: outPeer, Penalty: outPen, Queue: []string{"commit"}}
+		op.Side[core.OUT] = ClearingSide{Account: outPeer, Penalty: pen, Queue: []string{"commit"}}
 		a.kicks = append(a.kicks, outPeer)
 	}
 	return true, nil
@@ -350,14 +347,15 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 		}
 	}
 
-	// Forward finalize to OUT, then clean up current.
+	// Forward finalize to OUT (intermediary only; initiator already sent it).
 	op.Side[core.IN].Account = ""
-	if outPeer != "" && len(op.Side[core.OUT].Queue) == 0 {
+	if op.Seed == nil && outPeer != "" && len(op.Side[core.OUT].Queue) == 0 {
 		core.Enqueue(&op.Side[core.OUT].Queue, "finalize")
 		op.Preimage = preimage
 		op.Final = final
 		a.kicks = append(a.kicks, outPeer)
 	}
+	if op.Seed != nil { op.Side[core.OUT].Account = "" } // initiator: clear OUT after continuation
 	if op.Side[core.IN].Account == "" && op.Side[core.OUT].Account == "" {
 		delete(a.Clearings, id)
 	}
@@ -372,8 +370,11 @@ func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
 	if ok {
 		penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
 		ls.AddBalance(-int64(op.Amount+penConsumed), ts)
-		op.Side[core.OUT].Account = ""
-		if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
+		if op.Seed == nil { // intermediary: clear OUT now
+			op.Side[core.OUT].Account = ""
+			if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
+		}
+		// Initiator (Seed != nil): keep OUT.Account for continuation in reqFinalize
 		if outPeer != "" { a.kicks = append(a.kicks, outPeer) }
 	} else {
 		op.Side[core.OUT].Account = ""
@@ -401,14 +402,14 @@ func (a *App) scheduleCancel(id string) {
 func (a *App) reqRollback(id, peer string, ls *core.Link, ts int64) (bool, error) {
 	op := a.Clearings[id]
 	if op == nil { return false, fmt.Errorf("rollback: unknown payment %s", id) }
-	if op.Side[core.IN].Account != peer { return false, fmt.Errorf("rollback: wrong peer %s", peer) }
+	if op.Side[core.OUT].Account != peer { return false, fmt.Errorf("rollback: wrong peer %s", peer) }
 
-	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
+	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
 	if penConsumed > 0 { ls.AddBalance(int64(penConsumed), ts) }
-	op.Side[core.IN].Account = ""
-	if op.Side[core.OUT].Account != "" {
-		core.Enqueue(&op.Side[core.OUT].Queue, "rollback")
-		a.kicks = append(a.kicks, op.Side[core.OUT].Account)
+	op.Side[core.OUT].Account = ""
+	if op.Side[core.IN].Account != "" {
+		core.Enqueue(&op.Side[core.IN].Queue, "rollback")
+		a.kicks = append(a.kicks, op.Side[core.IN].Account)
 	} else {
 		delete(a.Clearings, id)
 	}
@@ -418,11 +419,11 @@ func (a *App) reqRollback(id, peer string, ls *core.Link, ts int64) (bool, error
 func (a *App) respRollback(id string, ls *core.Link, ok bool, ts int64) {
 	op := a.Clearings[id]
 	if op == nil { return }
-	core.Dequeue(&op.Side[core.OUT].Queue)
-	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
+	core.Dequeue(&op.Side[core.IN].Queue)
+	penConsumed := penaltyTick(op.Amount, op.Side[core.IN].Penalty, op.Side[core.IN].Time, ts)
 	if penConsumed > 0 { ls.AddBalance(-int64(penConsumed), ts) }
-	op.Side[core.OUT].Account = ""
-	if op.Side[core.IN].Account == "" { delete(a.Clearings, id) }
+	op.Side[core.IN].Account = ""
+	if op.Side[core.OUT].Account == "" { delete(a.Clearings, id) }
 }
 
 func (a *App) reqCancel(id, peer string, ls *core.Link, ts int64, preimage []byte) (bool, error) {
@@ -673,6 +674,7 @@ func (a *App) msgFound(sender string, raw json.RawMessage) {
 	if json.Unmarshal(raw, &m) != nil { return }
 	p := a.paths[m.ID]
 	if p == nil { return }
+	p.Peer[1] = sender
 	p.Hops = m.Hops + 1
 	if p.Seed != nil {
 		if MaxDepth > 0 && p.Hops > MaxDepth*2+1 { return }
