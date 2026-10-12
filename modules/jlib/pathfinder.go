@@ -195,6 +195,7 @@ func (e *Engine) MsgSearch(sender string, raw json.RawMessage) {
 	if json.Unmarshal(raw, &m) != nil { return }
 	dir := m.Direction
 	if dir > 1 { return }
+	if bw := e.bwFn(sender, int(dir)); bw <= 0 || m.Gas > uint64(bw) { return }
 
 	p := e.Paths[m.ID]
 
