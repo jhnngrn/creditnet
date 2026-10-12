@@ -376,11 +376,6 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				a.kicks = append(a.kicks, outPeer)
 			}
 		}
-	} else if op.Seed != nil && final && len(preimage) > 0 {
-		// Initiator: intermediary forced final. Clean up orphaned nextOp
-		// that respFinalize ok may have already created.
-		nextID := hex.EncodeToString(preimage)
-		delete(a.Clearings, nextID)
 	}
 
 	// Forward finalize to OUT (intermediary only; initiator already sent it).
@@ -511,7 +506,7 @@ func (a *App) scheduleCancel(id string) {
 
 func (a *App) reqRollback(id, peer string, ls *core.Link, ts int64) (bool, error) {
 	op := a.Clearings[id]
-	if op == nil { return false, fmt.Errorf("rollback: unknown payment %s", id) }
+	if op == nil { return false, nil }
 	if op.Side[core.OUT].Account != peer { return false, fmt.Errorf("rollback: wrong peer %s", peer) }
 
 	penConsumed := penaltyTick(op.Amount, op.Side[core.OUT].Penalty, op.Side[core.OUT].Time, ts)
