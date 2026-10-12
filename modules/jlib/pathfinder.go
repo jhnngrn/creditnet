@@ -315,7 +315,7 @@ func (e *Engine) climbSearch(id string, p *Path, dir uint8) {
 	if e.TransferFn != nil { e.TransferFn(parent, int64(e.GasCharge)) }
 	e.sendFn(parent, "search", core.Enc(SearchMsg{
 		ID: id, Direction: dir, Gas: p.Gas,
-		Amount: p.Amount, Fee: p.Fee, Penalty: p.Penalty, Hops: p.Hops,
+		Amount: p.Amount, Fee: p.Fee, Penalty: p.Penalty, Hops: p.Hops + 1,
 	}))
 	p.Gas = 0
 }
