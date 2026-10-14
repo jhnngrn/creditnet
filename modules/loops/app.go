@@ -334,45 +334,38 @@ func (a *App) reqFinalize(id, peer string, ls *core.Link, ts int64, preimage []b
 				a.Clearings[nextID] = nextOp
 				a.scheduleCleanup(nextID, core.IN)
 			}
-		} else if op.Seed != nil {
-			// Initiator: closing finalize arrived.
-			if nextOp := a.Clearings[nextID]; nextOp != nil {
-				// Normal: nextOp created in respFinalize ok with OUT side.
-				nextOp.Side[core.IN] = ClearingSide{Account: peer, Time: ts, Penalty: op.Side[core.IN].Penalty}
-				a.scheduleCleanup(nextID, core.IN)
-				core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
-				a.kicks = append(a.kicks, nextOp.Side[core.OUT].Account)
-			} else if outPeer != "" {
-				// respFinalize(k) hasn't run yet. Create like startClearing:
-				// OUT side without Time, IN side settled. Queue finalize.
-				nextStep := op.Step - 1
-				nextChunks := op.Chunks - 1
-				avlOut := a.pbFn(outPeer, core.OUT) + op.Amount + op.Side[core.OUT].Penalty
-				avlIn := a.pbFn(peer, core.IN) + op.Amount + op.Side[core.IN].Penalty
-				isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < 2*op.Amount || avlIn < 2*op.Amount
-				nextOp := &Clearing{
-					ID: nextID, Amount: op.Amount,
-					Seed: op.Seed, Step: nextStep, Chunks: nextChunks,
-					Final: isFinal,
-					Side: [2]ClearingSide{
-						{Account: peer, Time: ts, Penalty: op.Side[core.IN].Penalty},
-						{Account: outPeer, Penalty: op.Side[core.OUT].Penalty},
-					},
-				}
-				if nextStep >= 1 {
-					nextOp.Preimage = chainHash(op.Seed, nextStep-1)
-				}
-				if nextStep >= 2 {
-					nextOp.CancelPre = chainHash(op.Seed, nextStep-2)
-				}
-				a.Clearings[nextID] = nextOp
-				a.scheduleCleanup(nextID, core.IN)
-				if nextOp.CancelPre != nil {
-					a.scheduleCancel(nextID)
-				}
-				core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
-				a.kicks = append(a.kicks, outPeer)
+		} else if op.Seed != nil && outPeer != "" {
+			// Initiator: create complete clearing and drive next chunk.
+			// In sync transport reqFinalize always arrives before respFinalize,
+			// so the initiator handles all continuation here.
+			// OUT side without Time — respFinalize sets it when OUT accepts.
+			nextStep := op.Step - 1
+			nextChunks := op.Chunks - 1
+			avlOut := a.pbFn(outPeer, core.OUT) + op.Amount + op.Side[core.OUT].Penalty
+			avlIn := a.pbFn(peer, core.IN) + op.Amount + op.Side[core.IN].Penalty
+			isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < 2*op.Amount || avlIn < 2*op.Amount
+			nextOp := &Clearing{
+				ID: nextID, Amount: op.Amount,
+				Seed: op.Seed, Step: nextStep, Chunks: nextChunks,
+				Final: isFinal,
+				Side: [2]ClearingSide{
+					{Account: peer, Time: ts, Penalty: op.Side[core.IN].Penalty},
+					{Account: outPeer, Penalty: op.Side[core.OUT].Penalty},
+				},
 			}
+			if nextStep >= 1 {
+				nextOp.Preimage = chainHash(op.Seed, nextStep-1)
+			}
+			if nextStep >= 2 {
+				nextOp.CancelPre = chainHash(op.Seed, nextStep-2)
+			}
+			a.Clearings[nextID] = nextOp
+			a.scheduleCleanup(nextID, core.IN)
+			if nextOp.CancelPre != nil {
+				a.scheduleCancel(nextID)
+			}
+			core.Enqueue(&nextOp.Side[core.OUT].Queue, "finalize")
+			a.kicks = append(a.kicks, outPeer)
 		}
 	}
 
@@ -430,41 +423,12 @@ func (a *App) respFinalize(id string, ls *core.Link, ok bool, ts int64) {
 				}
 			}
 		} else if !op.Final {
-			// Initiator: create or set Time on continuation clearing.
+			// Initiator: reqFinalize already created the continuation clearing.
+			// Set Time on OUT side now that the peer accepted.
 			nextID := hex.EncodeToString(op.Preimage)
 			if nextOp := a.Clearings[nextID]; nextOp != nil {
-				// reqFinalize(k) already ran — nextOp has both sides.
-				// Just set Time on OUT, like respCommit.
 				nextOp.Side[core.OUT].Time = ts
 				a.scheduleCleanup(nextID, core.OUT)
-			} else {
-				// Normal: create with OUT side (+ Time).
-				nextStep := op.Step - 1
-				nextChunks := op.Chunks - 1
-				inPeer := op.Side[core.IN].Account
-				avlOut := a.pbFn(outPeer, core.OUT) + op.Amount + op.Side[core.OUT].Penalty
-				avlIn := a.pbFn(inPeer, core.IN) + op.Amount + op.Side[core.IN].Penalty
-				isFinal := nextChunks <= 1 || nextStep <= 2 || avlOut < 2*op.Amount || avlIn < 2*op.Amount
-				nextOp := &Clearing{
-					ID: nextID, Amount: op.Amount,
-					Seed: op.Seed, Step: nextStep, Chunks: nextChunks,
-					Final: isFinal,
-					Side: [2]ClearingSide{
-						{},
-						{Account: outPeer, Time: ts, Penalty: op.Side[core.OUT].Penalty},
-					},
-				}
-				if nextStep >= 1 {
-					nextOp.Preimage = chainHash(op.Seed, nextStep-1)
-				}
-				if nextStep >= 2 {
-					nextOp.CancelPre = chainHash(op.Seed, nextStep-2)
-				}
-				a.Clearings[nextID] = nextOp
-				a.scheduleCleanup(nextID, core.OUT)
-				if nextOp.CancelPre != nil {
-					a.scheduleCancel(nextID)
-				}
 			}
 		}
 		op.Side[core.OUT].Account = ""
